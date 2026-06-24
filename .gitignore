@@ -1,0 +1,25 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# 签名私钥与证书（机密，勿入库）
+/signature/
+
+# 构建配置含签名口令（机密，勿入库）
+/build-profile.json5
+
+# 上架资料（本地保存）
+/release/

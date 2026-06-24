@@ -1,0 +1,9 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/DecibelPage",
+    "pages/AnglePage",
+    "pages/FlashlightPage",
+    "pages/Privacy"
+  ]
+}
