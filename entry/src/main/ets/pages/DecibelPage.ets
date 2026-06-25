@@ -458,7 +458,7 @@ struct DecibelPage {
       Text(this.fmtElapsed())
         .fontSize(13)
         .fontFamily(MONO)
-        .fontColor(this.th().textTertiary)
+        .fontColor(this.th().isDark ? '#8A5559' : '#C08185')
         .margin({ left: 10 })
     }
     .justifyContent(FlexAlign.Center)
