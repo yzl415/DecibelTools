@@ -1,4 +1,4 @@
-import { getTheme, AppTheme, levelColor } from '../model/Theme';
+import { getTheme, AppTheme, levelColor , MONO, MONO_B } from '../model/Theme';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
 
 /** 历史 · 趋势与记录 */
@@ -120,7 +120,7 @@ export struct HistoryView {
   SectionLabel(text: string) {
     Text(text)
       .fontSize(10)
-      .fontFamily('HarmonyOS Sans')
+      .fontFamily(MONO)
       .fontColor(this.th().textTertiary)
       .letterSpacing(1.4)
       .width('100%')
@@ -134,12 +134,11 @@ export struct HistoryView {
         Row() {
           Text(this.avgDb() > 0 ? this.avgDb().toString() : '--')
             .fontSize(24)
-            .fontFamily('HarmonyOS Sans')
-            .fontWeight(FontWeight.Bold)
+            .fontFamily(MONO_B)
             .fontColor(this.th().textPrimary)
           Text(' dB 均值')
             .fontSize(12)
-            .fontFamily('HarmonyOS Sans')
+            .fontFamily(MONO)
             .fontColor(this.th().textTertiary)
             .margin({ bottom: 2 })
         }
@@ -149,8 +148,7 @@ export struct HistoryView {
         Column() {
           Text('峰值 ' + (this.peakDb() > 0 ? this.peakDb().toString() : '--'))
             .fontSize(12)
-            .fontFamily('HarmonyOS Sans')
-            .fontWeight(FontWeight.Bold)
+            .fontFamily(MONO_B)
             .fontColor(this.th().danger)
           Text(this.records.length + ' 条记录')
             .fontSize(10)
@@ -242,12 +240,11 @@ export struct HistoryView {
       Column() {
         Text(r.avg.toString())
           .fontSize(18)
-          .fontFamily('HarmonyOS Sans')
-          .fontWeight(FontWeight.Bold)
+          .fontFamily(MONO_B)
           .fontColor(levelColor(r.avg))
         Text('PEAK ' + r.peak)
           .fontSize(9)
-          .fontFamily('HarmonyOS Sans')
+          .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
           .margin({ top: 2 })
       }

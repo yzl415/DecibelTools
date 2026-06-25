@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, TOOL_INDIGO } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_INDIGO , MONO, MONO_B } from '../model/Theme';
 
 @Entry
 @Component
@@ -87,12 +87,11 @@ struct TimerPage {
           Column() {
             Text(this.mmss(this.elapsedMs))
               .fontSize(50)
-              .fontFamily('HarmonyOS Sans')
-              .fontWeight(FontWeight.Bold)
+              .fontFamily(MONO_B)
               .fontColor(this.th().textPrimary)
             Text(this.cs(this.elapsedMs))
               .fontSize(14)
-              .fontFamily('HarmonyOS Sans')
+              .fontFamily(MONO)
               .fontColor(this.th().textTertiary)
               .margin({ top: 6 })
             Text(this.running ? '计时中' : '已用时')
@@ -122,12 +121,12 @@ struct TimerPage {
                 Row() {
                   Text('计次 ' + (this.laps.length - idx).toString().padStart(2, '0'))
                     .fontSize(13)
-                    .fontFamily('HarmonyOS Sans')
+                    .fontFamily(MONO)
                     .fontColor(this.th().textSecondary)
                     .layoutWeight(1)
                   Text(this.mmss(lap) + this.cs(lap))
                     .fontSize(13)
-                    .fontFamily('HarmonyOS Sans')
+                    .fontFamily(MONO)
                     .fontColor(this.th().textPrimary)
                 }
                 .width('100%')

@@ -20,8 +20,13 @@ export const TOOL_INDIGO: string = '#6D78FF';
 export const TOOL_PURPLE: string = '#C084FC';
 export const TOOL_ORANGE: string = '#F59E0B';
 
-/** 等宽字体族（数字读数） */
-export const MONO: string = 'HarmonyOS Sans';
+/**
+ * 等宽字体族（数字读数）— JetBrains Mono，于 EntryAbility 注册。
+ * MONO 常规、MONO_B 加粗（注册为独立 family，避免 faux-bold 失真）。
+ * 数字读数一律用这两个，贴合声级计仪表质感。
+ */
+export const MONO: string = 'JBMono';
+export const MONO_B: string = 'JBMonoB';
 
 export class AppTheme {
   isDark: boolean = false;
@@ -45,7 +50,9 @@ export class AppTheme {
   track: string = '#E7E8EC';         // 进度槽底色
   accentSoft: string = '#E6F6EC';    // 强调色浅填充（图标圆底）
   // 仪表盘表面渐变两端（径向）
-  gaugeOuter: string = '#FFFFFF';
+  gaugeOuter: string = '#FFFFFF';    // 外圈径向渐变亮端（偏上高光）
+  gaugeEdge: string = '#D5D8E0';     // 外圈径向渐变暗端（边缘），制造凸起金属圈
+  gaugeHighlight: string = '#FFFFFF'; // 表盘顶部内高光（叠加白，弱透明）
   gaugeInner: string = '#E4E6EC';
   gaugeCore: string = '#EBECF0';     // 表盘中心遮罩色（=屏背景）
   // 工具图标圆底（浅色 tint）
@@ -85,6 +92,8 @@ export const DARK_THEME: AppTheme = (() => {
   t.track = '#232831';
   t.accentSoft = '#16201E';
   t.gaugeOuter = '#1A1D24';
+  t.gaugeEdge = '#0E1014';
+  t.gaugeHighlight = '#FFFFFF';
   t.gaugeInner = '#0E1014';
   t.gaugeCore = '#0B0C10';
   t.tintGreen = '#16201E';

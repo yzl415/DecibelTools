@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TOOL_PURPLE, TOOL_ORANGE } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TOOL_PURPLE, TOOL_ORANGE , MONO, MONO_B, withAlpha } from '../model/Theme';
 import { RecordStore } from '../model/RecordStore';
 import { AppIcon } from './AppIcon';
 
@@ -63,7 +63,7 @@ export struct HomeView {
               .fontColor(this.th().textPrimary)
             Text('TOOLBOX · v2.0')
               .fontSize(11)
-              .fontFamily('HarmonyOS Sans')
+              .fontFamily(MONO)
               .fontColor(this.th().textTertiary)
               .letterSpacing(2)
               .margin({ top: 3 })
@@ -113,7 +113,7 @@ export struct HomeView {
   SectionLabel(text: string) {
     Text(text)
       .fontSize(10)
-      .fontFamily('HarmonyOS Sans')
+      .fontFamily(MONO)
       .fontColor(this.th().textTertiary)
       .letterSpacing(2.2)
       .width('100%')
@@ -126,15 +126,16 @@ export struct HomeView {
       Row() {
         Text('环境噪音 · 最近')
           .fontSize(11)
-          .fontFamily('HarmonyOS Sans')
+          .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
           .letterSpacing(1.4)
           .layoutWeight(1)
         Row() {
           Circle().width(6).height(6).fill(this.th().accent)
+            .shadow({ radius: 7, color: withAlpha(this.th().accent, 'E6') })
           Text('GO')
             .fontSize(10)
-            .fontFamily('HarmonyOS Sans')
+            .fontFamily(MONO)
             .fontColor(this.th().accent)
             .letterSpacing(1)
             .margin({ left: 5 })
@@ -146,12 +147,11 @@ export struct HomeView {
       Row() {
         Text(this.recentDb > 0 ? this.recentDb.toString() : '--')
           .fontSize(46)
-          .fontFamily('HarmonyOS Sans')
-          .fontWeight(FontWeight.Bold)
+          .fontFamily(MONO_B)
           .fontColor(this.th().textPrimary)
         Text('dB')
           .fontSize(13)
-          .fontFamily('HarmonyOS Sans')
+          .fontFamily(MONO)
           .fontColor(this.th().textSecondary)
           .margin({ left: 6, bottom: 8 })
         Blank().layoutWeight(1)
@@ -195,9 +195,15 @@ export struct HomeView {
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 18, bottom: 18 })
-    .backgroundColor(this.th().surface)
+    .linearGradient({
+      angle: 150,
+      colors: this.th().isDark
+        ? [['#15181F', 0.0], ['#101216', 1.0]]
+        : [['#FFFFFF', 0.0], ['#F4F5F8', 1.0]]
+    })
     .borderRadius(22)
     .border({ width: 1, color: this.th().cardBorder })
+    .shadow({ radius: this.th().isDark ? 0 : 12, color: '#14000000', offsetY: 5 })
     .margin({ bottom: 22 })
     .onClick(() => router.pushUrl({ url: 'pages/DecibelPage' }))
   }
@@ -227,8 +233,7 @@ export struct HomeView {
       if (ins.value.length > 0) {
         Text(ins.value)
           .fontSize(13)
-          .fontFamily('HarmonyOS Sans')
-          .fontWeight(FontWeight.Bold)
+          .fontFamily(MONO_B)
           .fontColor(ins.accent)
       } else {
         Text('›')

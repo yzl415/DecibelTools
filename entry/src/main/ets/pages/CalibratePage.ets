@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, TOOL_GREEN } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_GREEN , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
 
 /** 麦克风校准：用滑块叠加偏移，使读数对齐已知参考声级计。 */
@@ -34,8 +34,7 @@ struct CalibratePage {
           Column() {
             Text((this.calibration >= 0 ? '+' : '') + this.calibration.toFixed(1))
               .fontSize(44)
-              .fontFamily('HarmonyOS Sans')
-              .fontWeight(FontWeight.Bold)
+              .fontFamily(MONO_B)
               .fontColor(this.th().accentStrong)
             Text('dB 偏移')
               .fontSize(12)
@@ -48,10 +47,10 @@ struct CalibratePage {
         Column() {
           Row() {
             Text('-15')
-              .fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textTertiary)
+              .fontSize(11).fontFamily(MONO).fontColor(this.th().textTertiary)
             Blank().layoutWeight(1)
             Text('+15')
-              .fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textTertiary)
+              .fontSize(11).fontFamily(MONO).fontColor(this.th().textTertiary)
           }
           .width('100%')
           Slider({ value: this.calibration, min: -15, max: 15, step: 0.5 })

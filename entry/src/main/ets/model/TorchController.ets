@@ -5,6 +5,7 @@
 import { camera } from '@kit.CameraKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
+import { MOCK_HARDWARE } from './MockConfig';
 
 export class TorchController {
   private mgr: camera.CameraManager | null = null;
@@ -13,6 +14,10 @@ export class TorchController {
 
   /** 初始化 CameraManager。返回设备是否支持手电筒 */
   init(ctx: common.UIAbilityContext): boolean {
+    if (MOCK_HARDWARE) {
+      // 模拟器无闪光灯，伪装为支持，仅维护开关状态供 UI 验证（屏幕上看不到真实灯光）
+      return true;
+    }
     try {
       this.mgr = camera.getCameraManager(ctx);
       return this.mgr.isTorchSupported();
@@ -29,6 +34,10 @@ export class TorchController {
 
   /** 常亮开关 */
   setOn(on: boolean): void {
+    if (MOCK_HARDWARE) {
+      this.on = on;
+      return;
+    }
     if (this.mgr === null) {
       return;
     }

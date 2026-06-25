@@ -12,6 +12,7 @@
  */
 import { audio } from '@kit.AudioKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { MOCK_HARDWARE } from './MockConfig';
 
 // 经验偏移：把 dBFS(-x) 抬到接近环境 SPL 的量程。不同机型麦克风灵敏度不同，用户可再校准。
 const SPL_OFFSET: number = 90;
@@ -23,6 +24,8 @@ const BANDS: number = 14;
 
 export class DecibelMeter {
   private capturer: audio.AudioCapturer | null = null;
+  private mockTimer: number = -1;      // 模拟模式定时器
+  private mockBase: number = 55;       // 模拟模式当前基准 dB
   private running: boolean = false;
   private calibration: number = 0;
   private weighting: string = 'A';
@@ -73,6 +76,11 @@ export class DecibelMeter {
     }
     this.smoothed = -1;
     this.levels = [];
+    if (MOCK_HARDWARE) {
+      this.startMock();
+      this.running = true;
+      return true;
+    }
     const streamInfo: audio.AudioStreamInfo = {
       samplingRate: audio.AudioSamplingRate.SAMPLE_RATE_16000,
       channels: audio.AudioChannel.CHANNEL_1,
@@ -125,6 +133,11 @@ export class DecibelMeter {
     if (raw < 0) {
       raw = 0;
     }
+    this.emit(raw);
+  }
+
+  /** 把一个 SPL 原始值经时间计权平滑 + 写入频谱缓冲后回调（真实/模拟共用） */
+  private emit(raw: number): void {
     // 时间计权（一阶指数平滑）：FAST 反应快，SLOW 平缓
     const alpha: number = this.response === 'SLOW' ? 0.12 : 0.45;
     if (this.smoothed < 0) {
@@ -140,9 +153,32 @@ export class DecibelMeter {
     this.onDb(this.smoothed);
   }
 
+  /** 模拟模式：生成在 35~85 dB 间缓慢游走的假数据，含校准与计权偏置 */
+  private startMock(): void {
+    this.mockBase = 55;
+    this.mockTimer = setInterval(() => {
+      this.mockBase += (Math.random() - 0.5) * 6;
+      if (this.mockBase < 35) {
+        this.mockBase = 35;
+      } else if (this.mockBase > 85) {
+        this.mockBase = 85;
+      }
+      const bias: number = this.weighting === 'C' ? WEIGHT_C_BIAS : WEIGHT_A_BIAS;
+      let raw: number = this.mockBase + (Math.random() - 0.5) * 8 + this.calibration + bias;
+      if (raw < 0) {
+        raw = 0;
+      }
+      this.emit(raw);
+    }, 100);
+  }
+
   /** 停止并释放 */
   async stop(): Promise<void> {
     this.running = false;
+    if (this.mockTimer !== -1) {
+      clearInterval(this.mockTimer);
+      this.mockTimer = -1;
+    }
     if (this.capturer === null) {
       return;
     }

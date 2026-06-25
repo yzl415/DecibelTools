@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, TOOL_ORANGE, TOOL_PURPLE } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, TOOL_ORANGE, TOOL_PURPLE , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
 import { AppIcon } from './AppIcon';
 
@@ -119,7 +119,7 @@ export struct SettingsView {
           .textAlign(TextAlign.Center)
         Text('VERSION 2.0.0')
           .fontSize(11)
-          .fontFamily('HarmonyOS Sans')
+          .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
           .opacity(0.7)
           .width('100%')
@@ -139,7 +139,7 @@ export struct SettingsView {
   SectionLabel(text: string) {
     Text(text)
       .fontSize(10)
-      .fontFamily('HarmonyOS Sans')
+      .fontFamily(MONO)
       .fontColor(this.th().textTertiary)
       .letterSpacing(1.6)
       .width('100%')
@@ -158,8 +158,7 @@ export struct SettingsView {
       if (icon === 'A' || icon === 'T') {
         Text(icon)
           .fontSize(12)
-          .fontFamily('HarmonyOS Sans')
-          .fontWeight(FontWeight.Bold)
+          .fontFamily(MONO_B)
           .fontColor(accent)
       } else {
         AppIcon({ name: icon, color: accent, iconSize: 15, cutout: tint })
@@ -179,7 +178,7 @@ export struct SettingsView {
         .layoutWeight(1)
       Text(value + (value.length > 0 ? ' ›' : '›'))
         .fontSize(13)
-        .fontFamily('HarmonyOS Sans')
+        .fontFamily(MONO)
         .fontColor(this.th().textSecondary)
     }
     .width('100%')
@@ -217,8 +216,7 @@ export struct SettingsView {
         ForEach(opts, (o: string) => {
           Text(o)
             .fontSize(11)
-            .fontFamily('HarmonyOS Sans')
-            .fontWeight(FontWeight.Bold)
+            .fontFamily(MONO_B)
             .fontColor(cur === o ? this.th().accentText : this.th().textTertiary)
             .padding({ left: 9, right: 9, top: 4, bottom: 4 })
             .backgroundColor(cur === o ? this.th().accent : '#00000000')

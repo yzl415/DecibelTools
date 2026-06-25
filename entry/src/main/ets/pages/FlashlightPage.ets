@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, TOOL_ORANGE, withAlpha } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO } from '../model/Theme';
 import { TorchController } from '../model/TorchController';
 
 @Entry
@@ -137,7 +137,7 @@ struct FlashlightPage {
               .layoutWeight(1)
             Text(this.mode === 'strobe' ? this.freqHz + ' 次/秒' : '100%')
               .fontSize(12)
-              .fontFamily('HarmonyOS Sans')
+              .fontFamily(MONO)
               .fontColor(TOOL_ORANGE)
           }
           .width('100%')

@@ -27,6 +27,14 @@ export default class EntryAbility extends UIAbility {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
+      // 注册等宽数字字体（JetBrains Mono · OFL）。数字读数全用它，贴合声级计仪表质感。
+      try {
+        const uiFont = windowStage.getMainWindowSync().getUIContext().getFont();
+        uiFont.registerFont({ familyName: 'JBMono', familySrc: '/font/JetBrainsMono-Regular.ttf' });
+        uiFont.registerFont({ familyName: 'JBMonoB', familySrc: '/font/JetBrainsMono-Bold.ttf' });
+      } catch (e) {
+        hilog.error(DOMAIN, 'testTag', 'registerFont failed: %{public}s', JSON.stringify(e));
+      }
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
     });
   }

@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, TOOL_ORANGE, withAlpha } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
 
 @Entry
@@ -100,7 +100,7 @@ struct RulerPage {
               if (this.isMajor(idx)) {
                 Text(this.majorLabel(idx))
                   .fontSize(11)
-                  .fontFamily('HarmonyOS Sans')
+                  .fontFamily(MONO)
                   .fontColor(this.th().textSecondary)
                   .margin({ left: 6 })
               }
@@ -126,8 +126,7 @@ struct RulerPage {
           Row() {
             Text(this.distance().toFixed(this.unit === 'in' ? 2 : 1) + ' ' + this.unit)
               .fontSize(15)
-              .fontFamily('HarmonyOS Sans')
-              .fontWeight(FontWeight.Bold)
+              .fontFamily(MONO_B)
               .fontColor(this.th().accentText)
           }
           .padding({ left: 11, right: 11, top: 5, bottom: 5 })
@@ -290,8 +289,7 @@ struct RulerPage {
   UnitSeg(u: string) {
     Text(u)
       .fontSize(11)
-      .fontFamily('HarmonyOS Sans')
-      .fontWeight(FontWeight.Bold)
+      .fontFamily(MONO_B)
       .fontColor(this.unit === u ? this.th().accentText : this.th().textTertiary)
       .padding({ left: 9, right: 9, top: 4, bottom: 4 })
       .backgroundColor(this.unit === u ? TOOL_ORANGE : '#00000000')

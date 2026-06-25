@@ -4,15 +4,28 @@
  */
 import { sensor } from '@kit.SensorServiceKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { MOCK_HARDWARE } from './MockConfig';
 
 export class CompassSensor {
   private subscribed: boolean = false;
+  private mockTimer: number = -1;
+  private mockHeading: number = 0;
   // 回调：heading 方位角（度，0=正北，顺时针增大）
   onHeading: (heading: number) => void = () => {};
 
   /** 开始订阅。返回是否成功 */
   start(): boolean {
     if (this.subscribed) {
+      return true;
+    }
+    if (MOCK_HARDWARE) {
+      this.mockHeading = 0;
+      this.mockTimer = setInterval(() => {
+        // 缓慢顺时针旋转（约 18s 一圈），便于观察方位变化
+        this.mockHeading = (this.mockHeading + 2) % 360;
+        this.onHeading(this.mockHeading);
+      }, 100);
+      this.subscribed = true;
       return true;
     }
     try {
@@ -33,6 +46,12 @@ export class CompassSensor {
 
   stop(): void {
     if (!this.subscribed) {
+      return;
+    }
+    if (this.mockTimer !== -1) {
+      clearInterval(this.mockTimer);
+      this.mockTimer = -1;
+      this.subscribed = false;
       return;
     }
     try {

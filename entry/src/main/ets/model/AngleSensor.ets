@@ -4,15 +4,29 @@
  */
 import { sensor } from '@kit.SensorServiceKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { MOCK_HARDWARE } from './MockConfig';
 
 export class AngleSensor {
   private subscribed: boolean = false;
+  private mockTimer: number = -1;
+  private mockT: number = 0;
   // 回调：pitch / roll 角度（度）
   onAngle: (pitch: number, roll: number) => void = () => {};
 
   /** 开始订阅。返回是否成功 */
   start(): boolean {
     if (this.subscribed) {
+      return true;
+    }
+    if (MOCK_HARDWARE) {
+      this.mockT = 0;
+      this.mockTimer = setInterval(() => {
+        this.mockT += 0.05;
+        const pitch: number = Math.sin(this.mockT) * 30;
+        const roll: number = Math.cos(this.mockT * 0.7) * 20;
+        this.onAngle(pitch, roll);
+      }, 100);
+      this.subscribed = true;
       return true;
     }
     try {
@@ -36,6 +50,12 @@ export class AngleSensor {
 
   stop(): void {
     if (!this.subscribed) {
+      return;
+    }
+    if (this.mockTimer !== -1) {
+      clearInterval(this.mockTimer);
+      this.mockTimer = -1;
+      this.subscribed = false;
       return;
     }
     try {

@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme } from '../model/Theme';
+import { getTheme, AppTheme , MONO, MONO_B } from '../model/Theme';
 import { CompassSensor } from '../model/CompassSensor';
 
 @Entry
@@ -42,13 +42,11 @@ struct CompassPage {
         Row() {
           Text(this.heading.toString() + '°')
             .fontSize(46)
-            .fontFamily('HarmonyOS Sans')
-            .fontWeight(FontWeight.Bold)
+            .fontFamily(MONO_B)
             .fontColor(this.th().textPrimary)
           Text(' ' + CompassSensor.dirAbbr(this.heading))
             .fontSize(20)
-            .fontFamily('HarmonyOS Sans')
-            .fontWeight(FontWeight.Bold)
+            .fontFamily(MONO_B)
             .fontColor(this.th().accentStrong)
             .margin({ bottom: 6 })
         }
@@ -57,10 +55,18 @@ struct CompassPage {
 
         // 罗盘盘面
         Stack({ alignContent: Alignment.Center }) {
-          Circle().width(252).height(252)
-            .fill(this.th().gaugeOuter)
-            .shadow({ radius: this.th().isDark ? 0 : 12, color: '#1A000000', offsetY: 6 })
+          Column().width(252).height(252).borderRadius(126)
+            .radialGradient({
+              center: ['50%', '35%'],
+              radius: 174,
+              colors: [[this.th().gaugeOuter, 0.0], [this.th().gaugeEdge, 1.0]]
+            })
             .border({ width: 1, color: this.th().cardBorder })
+            .shadow({
+              radius: this.th().isDark ? 16 : 12,
+              color: this.th().isDark ? '#80000000' : '#1A000000',
+              offsetY: 6
+            })
           // 顶部固定指示三角
           Polygon().points([[6, 0], [12, 11], [0, 11]]).width(12).height(11)
             .fill(this.th().danger).offset({ y: -120 })
@@ -99,7 +105,7 @@ struct CompassPage {
             .layoutWeight(1)
           Text(CompassSensor.dirCn(this.heading) + ' · ±5°')
             .fontSize(12)
-            .fontFamily('HarmonyOS Sans')
+            .fontFamily(MONO)
             .fontColor(this.th().accentStrong)
         }
         .width('100%')

@@ -1,6 +1,6 @@
 import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, TOOL_GREEN, TOOL_INDIGO } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO } from '../model/Theme';
 import { DecibelMeter } from '../model/DecibelMeter';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
@@ -11,6 +11,7 @@ import { AppIcon } from '../components/AppIcon';
 struct DecibelPage {
   @StorageProp('themeDark') themeDark: boolean = false;
   @State current: number = 0;
+  @State needle: number = -80;     // 指针角度，随 current 同步更新（直接绑 state 才会重绘）
   @State peak: number = 0;
   @State avg: number = 0;
   @State minDb: number = 0;
@@ -89,6 +90,7 @@ struct DecibelPage {
     this.measuring = true;
     this.uiTimer = setInterval(() => {
       this.current = Math.round(this.latest);
+      this.needle = this.needleAngle();
       this.avg = this.count > 0 ? Math.round(this.sum / this.count) : 0;
       this.elapsed = Math.floor((Date.now() - this.startTs) / 1000);
       this.spectrum = this.meter.getSpectrum();
@@ -111,6 +113,7 @@ struct DecibelPage {
       }
     }
     this.measuring = false;
+    this.needle = -80;   // 指针归位到起点（30dB）
   }
 
   toggle(): void {
@@ -228,8 +231,7 @@ struct DecibelPage {
   Seg(label: string, active: boolean, activeColor: string, cb: () => void) {
     Text(label)
       .fontSize(11)
-      .fontFamily('HarmonyOS Sans')
-      .fontWeight(FontWeight.Bold)
+      .fontFamily(MONO_B)
       .fontColor(active ? this.th().accentText : this.th().textTertiary)
       .padding({ left: 10, right: 10, top: 4, bottom: 4 })
       .backgroundColor(active ? activeColor : '#00000000')
@@ -237,13 +239,45 @@ struct DecibelPage {
       .onClick(cb)
   }
 
+  // 单根主刻度短线（满尺寸容器旋转，短线在顶部）
+  @Builder
+  Tick(angle: number) {
+    Stack({ alignContent: Alignment.Top }) {
+      Column()
+        .width(3).height(11).borderRadius(1)
+        .backgroundColor(this.th().tick)
+        .margin({ top: 8 })
+    }
+    .width(260).height(260)
+    .rotate({ angle: angle })
+  }
+
   @Builder
   Gauge() {
     Stack({ alignContent: Alignment.Center }) {
-      // 表盘外圈
-      Circle().width(260).height(260)
-        .fill(this.th().gaugeOuter)
-        .shadow({ radius: this.th().isDark ? 0 : 14, color: '#22000000', offsetY: 6 })
+      // 表盘外圈：径向渐变制造凸起金属圈 + 外投影
+      Column()
+        .width(260).height(260).borderRadius(130)
+        .radialGradient({
+          center: ['50%', '35%'],
+          radius: 180,
+          colors: [[this.th().gaugeOuter, 0.0], [this.th().gaugeEdge, 1.0]]
+        })
+        .shadow({
+          radius: this.th().isDark ? 18 : 14,
+          color: this.th().isDark ? '#80000000' : '#22000000',
+          offsetY: 6
+        })
+      // 顶部内高光（弱白渐变，模拟弧面反光）
+      Column()
+        .width(260).height(260).borderRadius(130)
+        .linearGradient({
+          angle: 180,
+          colors: [
+            [withAlpha(this.th().gaugeHighlight, this.th().isDark ? '14' : '2E'), 0.0],
+            ['#00000000', 0.45]
+          ]
+        })
       // 彩色弧（sweepGradient），inset 18
       Circle().width(224).height(224)
         .fill(this.th().gaugeInner)
@@ -261,51 +295,63 @@ struct DecibelPage {
           ]
         })
         .opacity(this.measuring ? 0.95 : 0.5)
-      // 中心遮罩
-      Circle().width(188).height(188).fill(this.th().gaugeCore)
+      // 中心遮罩（凹陷核心 + 下沿暗影）
+      Circle().width(188).height(188)
+        .fill(this.th().gaugeCore)
+        .shadow({ radius: 6, color: this.th().isDark ? '#B3000000' : '#1A000000', offsetY: 1 })
 
-      // 刻度数字
-      Text('30').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+      // 4 根主刻度
+      this.Tick(-135)
+      this.Tick(-45)
+      this.Tick(45)
+      this.Tick(135)
+
+      // 刻度数字（等宽 mono）
+      Text('30').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 52, y: 178 })
-      Text('60').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+      Text('60').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 52, y: 64 })
-      Text('90').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+      Text('90').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 190, y: 64 })
-      Text('120').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+      Text('120').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 186, y: 178 })
 
-      // 指针（满尺寸容器旋转，三角在顶部）
+      // 指针（满尺寸容器旋转，三角在顶部，带等级辉光）
       Stack({ alignContent: Alignment.Top }) {
         Polygon()
           .points([[7, 0], [14, 16], [0, 16]])
           .width(14).height(16)
           .fill(levelColor(this.measuring ? this.current : 35))
+          .shadow({ radius: 8, color: withAlpha(levelColor(this.measuring ? this.current : 35), 'B3') })
           .margin({ top: 24 })
       }
       .width(260).height(260)
-      .rotate({ angle: this.needleAngle() })
+      .rotate({ angle: this.needle })
 
       // 中央读数
       Column() {
         Text('SOUND LEVEL')
           .fontSize(10)
-          .fontFamily('HarmonyOS Sans')
+          .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
           .letterSpacing(2.2)
-        Text(this.dispDb())
-          .fontSize(64)
-          .fontFamily('HarmonyOS Sans')
-          .fontWeight(FontWeight.Bold)
+        Text(this.measuring ? this.current.toString() : '--')
+          .fontSize(68)
+          .fontFamily(MONO_B)
           .fontColor(this.th().textPrimary)
-          .margin({ top: 4 })
+          .letterSpacing(-2.7)
+          .lineHeight(56)
+          .margin({ top: 6 })
         Text('dB(' + this.weighting + ') · ' + this.response)
           .fontSize(12)
-          .fontFamily('HarmonyOS Sans')
+          .fontFamily(MONO)
           .fontColor(this.th().textSecondary)
+          .letterSpacing(0.5)
           .margin({ top: 4 })
         if (this.measuring) {
           Row() {
             Circle().width(6).height(6).fill(levelColor(this.current))
+              .shadow({ radius: 6, color: withAlpha(levelColor(this.current), 'CC') })
             Text(levelDesc(this.current))
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
@@ -327,19 +373,21 @@ struct DecibelPage {
 
   @Builder
   Spectrum() {
-    Row({ space: 3 }) {
+    // 细窄定宽柱、居中成簇，贴合设计稿声级计样式（非铺满拉伸）
+    Row({ space: 4 }) {
       ForEach(this.spectrum, (h: number) => {
         Column()
-          .layoutWeight(1)
-          .height(42 * h)
-          .borderRadius(2)
+          .width(5)
+          .height(Math.max(3, 42 * h))
+          .borderRadius(2.5)
           .backgroundColor(levelColor(30 + h * 80))
       })
     }
     .width('100%')
     .height(42)
+    .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Bottom)
-    .margin({ top: 16, bottom: 16 })
+    .margin({ top: 16, bottom: 18 })
   }
 
   @Builder
@@ -364,12 +412,11 @@ struct DecibelPage {
     Column() {
       Text(value)
         .fontSize(21)
-        .fontFamily('HarmonyOS Sans')
-        .fontWeight(FontWeight.Bold)
+        .fontFamily(MONO_B)
         .fontColor(color)
       Text(label)
         .fontSize(9)
-        .fontFamily('HarmonyOS Sans')
+        .fontFamily(MONO)
         .fontColor(this.th().textTertiary)
         .letterSpacing(1.2)
         .margin({ top: 5 })
@@ -382,6 +429,7 @@ struct DecibelPage {
   StartBtn() {
     Row() {
       Circle().width(13).height(13).fill(this.th().accent)
+        .shadow({ radius: 10, color: withAlpha(this.th().accent, 'E6') })
       Text('开始测量')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
@@ -394,6 +442,7 @@ struct DecibelPage {
     .backgroundColor(this.th().accentSoft)
     .borderRadius(18)
     .border({ width: 1, color: withAlpha(this.th().accent, '40') })
+    .shadow({ radius: 22, color: withAlpha(this.th().accent, '29'), offsetY: 8 })
     .onClick(() => this.toggle())
   }
 
@@ -408,7 +457,7 @@ struct DecibelPage {
         .margin({ left: 9 })
       Text(this.fmtElapsed())
         .fontSize(13)
-        .fontFamily('HarmonyOS Sans')
+        .fontFamily(MONO)
         .fontColor(this.th().textTertiary)
         .margin({ left: 10 })
     }

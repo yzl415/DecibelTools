@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, withAlpha } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { AngleSensor } from '../model/AngleSensor';
 import { AppIcon } from '../components/AppIcon';
 
@@ -61,10 +61,18 @@ struct AnglePage {
       Column() {
         // 气泡水平仪盘
         Stack({ alignContent: Alignment.Center }) {
-          Circle().width(248).height(248)
-            .fill(this.th().gaugeOuter)
-            .shadow({ radius: this.th().isDark ? 0 : 12, color: '#1A000000', offsetY: 6 })
+          Column().width(248).height(248).borderRadius(124)
+            .radialGradient({
+              center: ['50%', '35%'],
+              radius: 172,
+              colors: [[this.th().gaugeOuter, 0.0], [this.th().gaugeEdge, 1.0]]
+            })
             .border({ width: 1, color: this.th().cardBorder })
+            .shadow({
+              radius: this.th().isDark ? 16 : 12,
+              color: this.th().isDark ? '#80000000' : '#1A000000',
+              offsetY: 6
+            })
           Circle().width(168).height(168).fill('#00000000')
             .border({ width: 1.5, color: this.th().divider })
           Circle().width(80).height(80).fill('#00000000')
@@ -84,8 +92,7 @@ struct AnglePage {
             })
           Text(this.tilt().toFixed(1) + '°')
             .fontSize(15)
-            .fontFamily('HarmonyOS Sans')
-            .fontWeight(FontWeight.Bold)
+            .fontFamily(MONO_B)
             .fontColor(this.isLevel() ? '#FFFFFF' : '#FFFFFF')
             .offset({
               x: Math.max(-95, Math.min(95, this.roll * 3)),
@@ -156,12 +163,11 @@ struct AnglePage {
     Column() {
       Text(value.toFixed(1) + '°')
         .fontSize(24)
-        .fontFamily('HarmonyOS Sans')
-        .fontWeight(FontWeight.Bold)
+        .fontFamily(MONO_B)
         .fontColor(this.th().textPrimary)
       Text(label)
         .fontSize(9)
-        .fontFamily('HarmonyOS Sans')
+        .fontFamily(MONO)
         .fontColor(this.th().textTertiary)
         .letterSpacing(1.2)
         .margin({ top: 5 })
