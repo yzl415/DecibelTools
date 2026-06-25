@@ -3,7 +3,11 @@
     "pages/Index",
     "pages/DecibelPage",
     "pages/AnglePage",
+    "pages/CompassPage",
+    "pages/RulerPage",
     "pages/FlashlightPage",
+    "pages/TimerPage",
+    "pages/CalibratePage",
     "pages/Privacy"
   ]
 }

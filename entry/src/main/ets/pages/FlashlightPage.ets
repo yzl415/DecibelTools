@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_ORANGE, withAlpha } from '../model/Theme';
 import { TorchController } from '../model/TorchController';
 
 @Entry
@@ -8,8 +8,8 @@ import { TorchController } from '../model/TorchController';
 struct FlashlightPage {
   @StorageProp('themeDark') themeDark: boolean = false;
   @State on: boolean = false;
-  @State strobe: boolean = false;
-  @State freqHz: number = 5;        // 频闪频率
+  @State mode: string = 'steady';   // steady | strobe | sos
+  @State freqHz: number = 5;
   @State supported: boolean = true;
   private torch: TorchController = new TorchController();
 
@@ -26,94 +26,144 @@ struct FlashlightPage {
     this.torch.dispose();
   }
 
-  toggleLight(): void {
-    if (this.strobe) {
-      return;
+  // 中央圆盘点击：切换开关（当前模式生效）
+  toggleDisc(): void {
+    if (this.on) {
+      this.allOff();
+    } else {
+      this.applyMode(this.mode);
     }
-    const next: boolean = !this.on;
-    this.torch.setOn(next);
-    this.on = next;
   }
 
-  toggleStrobe(): void {
-    if (this.strobe) {
-      this.torch.stopStrobe();
-      this.torch.setOn(false);
-      this.strobe = false;
-      this.on = false;
+  allOff(): void {
+    this.torch.stopStrobe();
+    this.torch.setOn(false);
+    this.on = false;
+  }
+
+  applyMode(m: string): void {
+    this.torch.stopStrobe();
+    if (m === 'steady') {
+      this.torch.setOn(true);
+    } else if (m === 'strobe') {
+      this.torch.startStrobe(Math.round(1000 / (this.freqHz * 2)));
     } else {
-      const interval: number = Math.round(1000 / (this.freqHz * 2)); // 半周期
-      this.torch.startStrobe(interval);
-      this.strobe = true;
-      this.on = true;
+      this.torch.startSos(220);
+    }
+    this.on = true;
+  }
+
+  pickMode(m: string): void {
+    this.mode = m;
+    if (this.on) {
+      this.applyMode(m);
     }
   }
 
   setFreq(hz: number): void {
     this.freqHz = hz;
-    if (this.strobe) {
-      const interval: number = Math.round(1000 / (hz * 2));
-      this.torch.startStrobe(interval);
+    if (this.on && this.mode === 'strobe') {
+      this.torch.startStrobe(Math.round(1000 / (hz * 2)));
     }
+  }
+
+  statusText(): string {
+    if (!this.on) {
+      return '已关闭';
+    }
+    if (this.mode === 'strobe') {
+      return '频闪运行中';
+    }
+    if (this.mode === 'sos') {
+      return 'SOS 求救信号';
+    }
+    return '已开启';
   }
 
   build() {
     Column() {
-      this.NavBar('手电筒')
+      this.NavBar()
       Column() {
-        // 大圆形开关
+        // 发光圆盘
         Stack({ alignContent: Alignment.Center }) {
-          Circle().width(180).height(180)
-            .fill(this.on ? this.th().accent : this.th().surface)
-            .border({ width: this.th().shadowRadius > 0 ? 0 : 1, color: this.th().cardBorder })
-          Text(this.on ? '已开启' : '已关闭')
-            .fontSize(20)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.on ? '#FFFFFF' : this.th().textSecondary)
+          if (this.on) {
+            Column().width(200).height(200).borderRadius(100)
+              .radialGradient({
+                center: ['50%', '50%'], radius: 100,
+                colors: [[withAlpha(TOOL_ORANGE, '38'), 0], ['#00000000', 0.68]]
+              })
+          }
+          Column().width(140).height(140).borderRadius(70)
+            .radialGradient(this.on
+              ? {
+                  center: ['50%', '38%'], radius: 90,
+                  colors: [['#FBBF24', 0], ['#F59E0B', 1]]
+                }
+              : {
+                  center: ['50%', '38%'], radius: 90,
+                  colors: [[this.th().surface, 0], [this.th().surfaceAlt, 1]]
+                })
+            .shadow(this.on
+              ? { radius: 50, color: withAlpha(TOOL_ORANGE, '99') }
+              : { radius: 0, color: '#00000000' })
+            .border({ width: this.on ? 0 : 1, color: this.th().cardBorder })
+          // 灯泡剪影
+          Column()
+            .width(38).height(54)
+            .borderRadius({ topLeft: 7, topRight: 7, bottomLeft: 9, bottomRight: 9 })
+            .backgroundColor(this.on ? withAlpha(this.th().bg, 'E6') : this.th().textTertiary)
+            .opacity(0.85)
         }
-        .margin({ top: 40 })
-        .onClick(() => this.toggleLight())
+        .width(200).height(200)
+        .margin({ top: 20, bottom: 6 })
+        .onClick(() => this.toggleDisc())
 
-        Text(this.strobe ? '频闪模式运行中，点击下方停止' : '点击圆形按钮开关手电筒')
-          .fontSize(14)
+        Text(this.statusText())
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.on ? TOOL_ORANGE : this.th().textSecondary)
+          .margin({ top: 6 })
+        Text('点击圆盘开关')
+          .fontSize(12)
           .fontColor(this.th().textTertiary)
-          .margin({ top: 24 })
+          .margin({ top: 3, bottom: 22 })
 
-        // 频闪区
+        // 亮度（频闪频率复用为强度展示）
         Column() {
-          Text('频闪 / 爆闪')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.th().textPrimary)
-            .width('100%')
-          Text('频率：' + this.freqHz + ' 次/秒')
-            .fontSize(13)
-            .fontColor(this.th().textSecondary)
-            .width('100%')
-            .margin({ top: 8 })
+          Row() {
+            Text(this.mode === 'strobe' ? '频闪频率' : '亮度')
+              .fontSize(12)
+              .fontColor(this.th().textSecondary)
+              .layoutWeight(1)
+            Text(this.mode === 'strobe' ? this.freqHz + ' 次/秒' : '100%')
+              .fontSize(12)
+              .fontFamily('HarmonyOS Sans')
+              .fontColor(TOOL_ORANGE)
+          }
+          .width('100%')
+          .margin({ bottom: 6 })
           Slider({ value: this.freqHz, min: 1, max: 20, step: 1 })
             .width('100%')
-            .blockColor(this.th().accent)
-            .selectedColor(this.th().accent)
+            .blockColor('#FFFFFF')
+            .selectedColor(TOOL_ORANGE)
             .trackColor(this.th().track)
-            .margin({ top: 4 })
-            .onChange((value: number) => this.setFreq(Math.round(value)))
-          Button(this.strobe ? '停止频闪' : '开始频闪')
-            .width('100%')
-            .height(48)
-            .fontSize(16)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.strobe ? this.th().danger : this.th().accent)
-            .borderRadius(14)
-            .margin({ top: 16 })
-            .onClick(() => this.toggleStrobe())
+            .enabled(this.mode === 'strobe')
+            .onChange((v: number) => this.setFreq(Math.round(v)))
         }
         .width('100%')
-        .padding(18)
-        .margin({ top: 40 })
+        .padding(16)
         .backgroundColor(this.th().surface)
-        .borderRadius(18)
-        .border({ width: this.th().shadowRadius > 0 ? 0 : 1, color: this.th().cardBorder })
+        .borderRadius(16)
+        .border({ width: 1, color: this.th().cardBorder })
+        .margin({ bottom: 12 })
+
+        // 模式
+        Row({ space: 9 }) {
+          this.ModeTile('steady', '常亮')
+          this.ModeTile('strobe', '频闪')
+          this.ModeTile('sos', 'SOS')
+        }
+        .width('100%')
 
         if (!this.supported) {
           Text('当前设备不支持手电筒控制。')
@@ -121,13 +171,14 @@ struct FlashlightPage {
             .fontColor(this.th().danger)
             .margin({ top: 16 })
         }
-
         Text('提示：频闪可能引起不适，请勿直视，光敏性癫痫人群慎用。')
-          .fontSize(12)
-          .lineHeight(20)
+          .fontSize(11)
+          .lineHeight(18)
           .fontColor(this.th().textTertiary)
           .width('100%')
-          .margin({ top: 20 })
+          .textAlign(TextAlign.Center)
+          .margin({ top: 18 })
+        Blank().layoutWeight(1)
       }
       .layoutWeight(1)
       .width('100%')
@@ -137,22 +188,41 @@ struct FlashlightPage {
     .height('100%')
     .backgroundColor(this.th().bg)
   }
+  // PH_FLASH
 
   @Builder
-  NavBar(title: string) {
+  ModeTile(m: string, label: string) {
+    Text(label)
+      .fontSize(13)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.mode === m ? TOOL_ORANGE : this.th().textSecondary)
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .padding({ top: 13, bottom: 13 })
+      .backgroundColor(this.mode === m ? this.th().tintOrange : this.th().surface)
+      .borderRadius(14)
+      .border({ width: 1, color: this.mode === m ? withAlpha(TOOL_ORANGE, '66') : this.th().cardBorder })
+      .onClick(() => this.pickMode(m))
+  }
+
+  @Builder
+  NavBar() {
     Row() {
-      Text('‹ 返回')
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
+      }
+      .onClick(() => router.back())
+      Text('手电筒')
         .fontSize(16)
-        .fontColor(this.th().accent)
-        .onClick(() => router.back())
-        .layoutWeight(1)
-      Text(title)
-        .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.th().textPrimary)
-      Blank().layoutWeight(1)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+      Column().width(36).height(36)
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 14, bottom: 10 })
+    .padding({ left: 20, right: 20, top: 12, bottom: 8 })
   }
 }

@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, withAlpha } from '../model/Theme';
 import { AngleSensor } from '../model/AngleSensor';
+import { AppIcon } from '../components/AppIcon';
 
 @Entry
 @Component
@@ -12,6 +13,8 @@ struct AnglePage {
   private sensor: AngleSensor = new AngleSensor();
   private lastPitch: number = 0;
   private lastRoll: number = 0;
+  private calPitch: number = 0;
+  private calRoll: number = 0;
   private uiTimer: number = -1;
 
   th(): AppTheme {
@@ -24,10 +27,9 @@ struct AnglePage {
       this.lastRoll = roll;
     };
     this.active = this.sensor.start();
-    // 节流刷新
     this.uiTimer = setInterval(() => {
-      this.pitch = Math.round(this.lastPitch * 10) / 10;
-      this.roll = Math.round(this.lastRoll * 10) / 10;
+      this.pitch = Math.round((this.lastPitch - this.calPitch) * 10) / 10;
+      this.roll = Math.round((this.lastRoll - this.calRoll) * 10) / 10;
     }, 100);
   }
 
@@ -39,48 +41,92 @@ struct AnglePage {
     this.sensor.stop();
   }
 
-  // 是否接近水平（两轴都接近 0）
   isLevel(): boolean {
     return Math.abs(this.pitch) < 1 && Math.abs(this.roll) < 1;
   }
 
+  calibrate(): void {
+    this.calPitch = this.lastPitch;
+    this.calRoll = this.lastRoll;
+  }
+
+  // 合成倾角（两轴矢量和）
+  tilt(): number {
+    return Math.round(Math.sqrt(this.pitch * this.pitch + this.roll * this.roll) * 10) / 10;
+  }
+
   build() {
     Column() {
-      this.NavBar('角度仪')
+      this.NavBar()
       Column() {
-        // 气泡水平仪：一个圆盘，气泡随倾角偏移
+        // 气泡水平仪盘
         Stack({ alignContent: Alignment.Center }) {
-          Circle().width(260).height(260).fill(this.th().surface)
+          Circle().width(248).height(248)
+            .fill(this.th().gaugeOuter)
+            .shadow({ radius: this.th().isDark ? 0 : 12, color: '#1A000000', offsetY: 6 })
             .border({ width: 1, color: this.th().cardBorder })
-          Circle().width(170).height(170).fill('#00000000')
-            .border({ width: 1, color: this.th().divider })
+          Circle().width(168).height(168).fill('#00000000')
+            .border({ width: 1.5, color: this.th().divider })
           Circle().width(80).height(80).fill('#00000000')
-            .border({ width: 1, color: this.th().divider })
-          // 十字线
-          Column().width(260).height(1).backgroundColor(this.th().divider)
-          Column().width(1).height(260).backgroundColor(this.th().divider)
-          // 气泡：偏移量按倾角比例，限制在圆盘内
-          Circle().width(54).height(54)
-            .fill(this.isLevel() ? this.th().success : this.th().accent)
-            .opacity(0.85)
+            .border({ width: 1.5, color: this.th().divider })
+          Column().width(212).height(1.5).backgroundColor(this.th().divider)
+          Column().width(1.5).height(212).backgroundColor(this.th().divider)
+          // 目标环
+          Circle().width(62).height(62).fill('#00000000')
+            .border({ width: 2, color: withAlpha(TOOL_GREEN, '73') })
+          // 气泡
+          Circle().width(50).height(50)
+            .fill(this.isLevel() ? this.th().accent : TOOL_INDIGO)
+            .shadow({ radius: 16, color: withAlpha(this.isLevel() ? TOOL_GREEN : TOOL_INDIGO, '99') })
+            .offset({
+              x: Math.max(-95, Math.min(95, this.roll * 3)),
+              y: Math.max(-95, Math.min(95, -this.pitch * 3))
+            })
+          Text(this.tilt().toFixed(1) + '°')
+            .fontSize(15)
+            .fontFamily('HarmonyOS Sans')
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.isLevel() ? '#FFFFFF' : '#FFFFFF')
             .offset({
               x: Math.max(-95, Math.min(95, this.roll * 3)),
               y: Math.max(-95, Math.min(95, -this.pitch * 3))
             })
         }
-        .margin({ top: 20 })
-
-        Text(this.isLevel() ? '已水平' : '调整中')
-          .fontSize(15)
-          .fontColor(this.isLevel() ? this.th().success : this.th().textSecondary)
-          .margin({ top: 20 })
+        .margin({ top: 6 })
 
         Row() {
-          this.AngleBox('前后倾角', this.pitch)
-          this.AngleBox('左右倾角', this.roll)
+          Circle().width(6).height(6).fill(this.isLevel() ? this.th().success : this.th().textTertiary)
+          Text(this.isLevel() ? '已水平' : '调整中')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.isLevel() ? this.th().success : this.th().textSecondary)
+            .margin({ left: 6 })
+        }
+        .margin({ top: 18 })
+
+        Row({ space: 9 }) {
+          this.AngleBox('横向 ROLL', this.roll)
+          this.AngleBox('纵向 PITCH', this.pitch)
         }
         .width('100%')
-        .margin({ top: 28 })
+        .margin({ top: 20 })
+
+        Row() {
+          Column().width(13).height(13).borderRadius(3).backgroundColor(TOOL_INDIGO)
+          Text('校准归零')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.th().textPrimary)
+            .margin({ left: 9 })
+        }
+        .justifyContent(FlexAlign.Center)
+        .width('100%')
+        .padding({ top: 15, bottom: 15 })
+        .backgroundColor(this.th().surface)
+        .borderRadius(16)
+        .border({ width: 1, color: this.th().cardBorder })
+        .margin({ top: 14 })
+        .onClick(() => this.calibrate())
 
         if (!this.active) {
           Text('未能读取到传感器数据，当前设备可能不支持。')
@@ -88,13 +134,12 @@ struct AnglePage {
             .fontColor(this.th().danger)
             .margin({ top: 16 })
         }
-
-        Text('提示：将手机平放可校准为水平。读数仅供参考。')
-          .fontSize(12)
+        Text('提示：将手机平放后点击校准归零。读数仅供参考。')
+          .fontSize(11)
           .fontColor(this.th().textTertiary)
           .width('100%')
           .textAlign(TextAlign.Center)
-          .margin({ top: 22 })
+          .margin({ top: 18 })
       }
       .layoutWeight(1)
       .width('100%')
@@ -104,42 +149,48 @@ struct AnglePage {
     .height('100%')
     .backgroundColor(this.th().bg)
   }
+  // PH_ANGLE
 
   @Builder
   AngleBox(label: string, value: number) {
     Column() {
       Text(value.toFixed(1) + '°')
-        .fontSize(30)
+        .fontSize(24)
+        .fontFamily('HarmonyOS Sans')
         .fontWeight(FontWeight.Bold)
         .fontColor(this.th().textPrimary)
       Text(label)
-        .fontSize(13)
-        .fontColor(this.th().textSecondary)
-        .margin({ top: 4 })
+        .fontSize(9)
+        .fontFamily('HarmonyOS Sans')
+        .fontColor(this.th().textTertiary)
+        .letterSpacing(1.2)
+        .margin({ top: 5 })
     }
     .layoutWeight(1)
-    .padding({ top: 18, bottom: 18 })
+    .padding({ top: 14, bottom: 14 })
     .backgroundColor(this.th().surface)
-    .borderRadius(14)
-    .margin({ left: 5, right: 5 })
-    .border({ width: this.th().shadowRadius > 0 ? 0 : 1, color: this.th().cardBorder })
+    .borderRadius(16)
+    .border({ width: 1, color: this.th().cardBorder })
   }
 
   @Builder
-  NavBar(title: string) {
+  NavBar() {
     Row() {
-      Text('‹ 返回')
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
+      }
+      .onClick(() => router.back())
+      Text('角度仪')
         .fontSize(16)
-        .fontColor(this.th().accent)
-        .onClick(() => router.back())
-        .layoutWeight(1)
-      Text(title)
-        .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.th().textPrimary)
-      Blank().layoutWeight(1)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+      Column().width(36).height(36)
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 14, bottom: 10 })
+    .padding({ left: 20, right: 20, top: 12, bottom: 8 })
   }
 }

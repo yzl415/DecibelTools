@@ -20,6 +20,16 @@
           ],
           "when": "inuse"
         }
+      },
+      {
+        "name": "ohos.permission.ACCELEROMETER",
+        "reason": "$string:reason_sensor",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ],
     "abilities": [

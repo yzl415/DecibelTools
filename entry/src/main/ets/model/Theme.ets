@@ -1,111 +1,152 @@
 /**
- * 设计令牌系统：集中管理两套主题（亮色·极简高级 / 暗色·暗黑质感）。
- * 组件通过 @StorageProp('themeDark') 订阅，调用 getTheme(isDark) 取色。
+ * 设计令牌系统 · 仪表风格（方向 A）。
+ * 亮色 / 暗色两套，组件通过 @StorageProp('themeDark') 订阅，getTheme(isDark) 取色。
+ *
+ * 主强调色 #00D68F；噪音等级令牌全局统一：
+ *   安静 #22C55E · 适中 #84CC16 · 一般 #EAB308 · 较吵 #F59E0B · 吵闹 #EF4444。
+ * 数字读数使用等宽字体（mono）。
  */
 
-export class AppTheme {
-  isDark: boolean;
-  bg: string;            // 页面背景
-  surface: string;       // 卡片背景
-  surfaceAlt: string;    // 次级表面（输入框 / chip / 分段控件）
-  navBar: string;        // 底部 Tab 背景
-  textPrimary: string;   // 主文字
-  textSecondary: string; // 次文字
-  textTertiary: string;  // 最弱文字 / 占位
-  accent: string;        // 品牌强调色
-  accentText: string;    // 强调色上的文字（按钮内）
-  divider: string;       // 分隔线
-  success: string;
-  danger: string;
-  warn: string;
-  // 卡片描边 / 阴影：亮色用极淡描边+微阴影，暗色用描边、无阴影
-  cardBorder: string;
-  shadowColor: string;
-  shadowRadius: number;
-  // 进度槽底色
-  track: string;
-  // 强调色的浅色填充（用于 chip / emoji 圆底兜底）
-  accentSoft: string;
+/** 全局噪音等级色阶（两套主题共用） */
+export const LEVEL_QUIET: string = '#22C55E';    // 安静
+export const LEVEL_MODERATE: string = '#84CC16'; // 适中
+export const LEVEL_NORMAL: string = '#EAB308';   // 一般
+export const LEVEL_LOUD: string = '#F59E0B';     // 较吵
+export const LEVEL_NOISY: string = '#EF4444';    // 吵闹
 
-  constructor(isDark: boolean, bg: string, surface: string, surfaceAlt: string,
-    navBar: string, textPrimary: string, textSecondary: string, textTertiary: string,
-    accent: string, accentText: string, divider: string, success: string,
-    danger: string, warn: string, cardBorder: string, shadowColor: string,
-    shadowRadius: number, track: string, accentSoft: string) {
-    this.isDark = isDark;
-    this.bg = bg;
-    this.surface = surface;
-    this.surfaceAlt = surfaceAlt;
-    this.navBar = navBar;
-    this.textPrimary = textPrimary;
-    this.textSecondary = textSecondary;
-    this.textTertiary = textTertiary;
-    this.accent = accent;
-    this.accentText = accentText;
-    this.divider = divider;
-    this.success = success;
-    this.danger = danger;
-    this.warn = warn;
-    this.cardBorder = cardBorder;
-    this.shadowColor = shadowColor;
-    this.shadowRadius = shadowRadius;
-    this.track = track;
-    this.accentSoft = accentSoft;
-  }
+/** 工具主题色（图标 / 局部强调，两套主题共用） */
+export const TOOL_GREEN: string = '#00D68F';
+export const TOOL_INDIGO: string = '#6D78FF';
+export const TOOL_PURPLE: string = '#C084FC';
+export const TOOL_ORANGE: string = '#F59E0B';
+
+/** 等宽字体族（数字读数） */
+export const MONO: string = 'HarmonyOS Sans';
+
+export class AppTheme {
+  isDark: boolean = false;
+  bg: string = '#EBECF0';            // 页面 / 手机屏背景
+  surface: string = '#FFFFFF';       // 卡片背景
+  surfaceAlt: string = '#F0F1F4';    // 次级表面（chip / 分段控件 / 图标按钮）
+  navBar: string = '#FFFFFFF2';      // 底部 Tab 背景
+  textPrimary: string = '#1A1C20';   // 主文字
+  textSecondary: string = '#6B7280'; // 次文字
+  textTertiary: string = '#98A0AD';  // 最弱文字 / 占位 / 标签
+  accent: string = '#00D68F';        // 品牌强调色
+  accentStrong: string = '#00B377';  // 强调色在浅底上的文字色（保证对比度）
+  accentText: string = '#0B0C10';    // 强调色填充上的文字色
+  divider: string = '#E7E8EC';       // 分隔线 / 卡片描边
+  success: string = '#16A34A';
+  danger: string = '#EF4444';
+  warn: string = '#F59E0B';
+  cardBorder: string = '#E7E8EC';    // 卡片描边
+  shadowColor: string = '#14000000'; // 卡片阴影色（暗色为透明）
+  shadowRadius: number = 10;
+  track: string = '#E7E8EC';         // 进度槽底色
+  accentSoft: string = '#E6F6EC';    // 强调色浅填充（图标圆底）
+  // 仪表盘表面渐变两端（径向）
+  gaugeOuter: string = '#FFFFFF';
+  gaugeInner: string = '#E4E6EC';
+  gaugeCore: string = '#EBECF0';     // 表盘中心遮罩色（=屏背景）
+  // 工具图标圆底（浅色 tint）
+  tintGreen: string = '#E6F6EC';
+  tintIndigo: string = '#EBEDFE';
+  tintPurple: string = '#F3EAFB';
+  tintOrange: string = '#FDF3E2';
+  // 状态条 / 刻度文字
+  tick: string = '#17181C';          // 表盘主刻度
+  statusFg: string = '#E6E8EC';      // 状态栏图标（亮色下为深色 -> 用 textPrimary 覆盖）
 }
 
-/** 亮色主题：暖中性背景 + 近黑文字 + 沉稳靛蓝，发丝描边、极微阴影 */
-export const LIGHT_THEME: AppTheme = new AppTheme(
-  false,
-  '#F5F6F8',   // bg
-  '#FFFFFF',   // surface
-  '#EEF0F4',   // surfaceAlt
-  '#FFFFFFF2', // navBar (近白略透)
-  '#17181C',   // textPrimary
-  '#6B7280',   // textSecondary
-  '#A1A7B3',   // textTertiary
-  '#4F46E5',   // accent (靛蓝)
-  '#FFFFFF',   // accentText
-  '#ECEDF1',   // divider
-  '#16A34A',   // success
-  '#E5484D',   // danger
-  '#F59E0B',   // warn
-  '#00000000', // cardBorder (亮色不描边)
-  '#14000000', // shadowColor (极淡)
-  10,          // shadowRadius
-  '#E6E8EE',   // track
-  '#EEEDFB'    // accentSoft
-);
+/** 亮色主题：浅灰蓝表面 + 近黑文字 + 翠绿强调，发丝描边 + 微阴影 */
+export const LIGHT_THEME: AppTheme = new AppTheme();
 
-/** 暗色主题：近黑分层表面 + 高亮靛蓝 + 描边分层，无阴影 */
-export const DARK_THEME: AppTheme = new AppTheme(
-  true,
-  '#0E0F13',   // bg
-  '#1A1C22',   // surface
-  '#24262E',   // surfaceAlt
-  '#15161B',   // navBar
-  '#F2F3F5',   // textPrimary
-  '#9CA3AF',   // textSecondary
-  '#6B7280',   // textTertiary
-  '#6D78FF',   // accent (高亮靛蓝)
-  '#FFFFFF',   // accentText
-  '#2A2D36',   // divider
-  '#34D399',   // success
-  '#F87171',   // danger
-  '#FBBF24',   // warn
-  '#2A2D36',   // cardBorder (描边分层)
-  '#00000000', // shadowColor (暗色不投影)
-  0,           // shadowRadius
-  '#2A2D36',   // track
-  '#2A2740'    // accentSoft
-);
+/** 暗色主题：近黑分层表面 + 翠绿强调 + 描边分层，无阴影 */
+export const DARK_THEME: AppTheme = (() => {
+  const t: AppTheme = new AppTheme();
+  t.isDark = true;
+  t.bg = '#0B0C10';
+  t.surface = '#13151B';
+  t.surfaceAlt = '#15171D';
+  t.navBar = '#0B0C10F2';
+  t.textPrimary = '#F2F3F5';
+  t.textSecondary = '#9CA3AF';
+  t.textTertiary = '#5B6470';
+  t.accent = '#00D68F';
+  t.accentStrong = '#00D68F';
+  t.accentText = '#0B0C10';
+  t.divider = '#232831';
+  t.success = '#22C55E';
+  t.danger = '#FF6B6B';
+  t.warn = '#F59E0B';
+  t.cardBorder = '#232831';
+  t.shadowColor = '#00000000';
+  t.shadowRadius = 0;
+  t.track = '#232831';
+  t.accentSoft = '#16201E';
+  t.gaugeOuter = '#1A1D24';
+  t.gaugeInner = '#0E1014';
+  t.gaugeCore = '#0B0C10';
+  t.tintGreen = '#16201E';
+  t.tintIndigo = '#1A1E2A';
+  t.tintPurple = '#251E2A';
+  t.tintOrange = '#26221A';
+  t.tick = '#E6E8EC';
+  t.statusFg = '#E6E8EC';
+  return t;
+})();
 
 /** 根据是否暗色返回对应主题 */
 export function getTheme(isDark: boolean): AppTheme {
   return isDark ? DARK_THEME : LIGHT_THEME;
 }
 
-/** 在某色上叠加透明度后缀（hex 8 位），alpha 为 00~FF 的两位十六进制 */
+/** 在某色上叠加透明度（hex 8 位 #AARRGGBB）。alpha 为两位十六进制 00~FF */
 export function withAlpha(color: string, alphaHex: string): string {
-  return color + alphaHex;
+  return '#' + alphaHex + color.substring(1);
+}
+
+/**
+ * 噪音分贝 -> 等级色。阈值与设计稿一致：
+ * <40 安静 · <55 适中 · <70 一般 · <85 较吵 · 否则 吵闹。
+ */
+export function levelColor(db: number): string {
+  if (db < 40) {
+    return LEVEL_QUIET;
+  } else if (db < 55) {
+    return LEVEL_MODERATE;
+  } else if (db < 70) {
+    return LEVEL_NORMAL;
+  } else if (db < 85) {
+    return LEVEL_LOUD;
+  }
+  return LEVEL_NOISY;
+}
+
+/** 噪音分贝 -> 等级中文标签（短） */
+export function levelLabel(db: number): string {
+  if (db < 40) {
+    return '安静';
+  } else if (db < 55) {
+    return '适中';
+  } else if (db < 70) {
+    return '一般';
+  } else if (db < 85) {
+    return '较吵';
+  }
+  return '吵闹';
+}
+
+/** 噪音分贝 -> 等级描述（长，用于状态胶囊） */
+export function levelDesc(db: number): string {
+  if (db < 40) {
+    return '安静 · 适合休息';
+  } else if (db < 55) {
+    return '适中 · 安静环境';
+  } else if (db < 70) {
+    return '一般 · 相当于正常对话';
+  } else if (db < 85) {
+    return '较吵 · 相当于繁忙街道';
+  }
+  return '吵闹 · 注意听力保护';
 }

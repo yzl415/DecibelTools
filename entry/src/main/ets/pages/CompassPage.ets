@@ -1,0 +1,163 @@
+import { router } from '@kit.ArkUI';
+import { getTheme, AppTheme } from '../model/Theme';
+import { CompassSensor } from '../model/CompassSensor';
+
+@Entry
+@Component
+struct CompassPage {
+  @StorageProp('themeDark') themeDark: boolean = false;
+  @State heading: number = 0;
+  @State active: boolean = false;
+  private sensor: CompassSensor = new CompassSensor();
+  private lastHeading: number = 0;
+  private uiTimer: number = -1;
+
+  th(): AppTheme {
+    return getTheme(this.themeDark);
+  }
+
+  aboutToAppear(): void {
+    this.sensor.onHeading = (h: number) => {
+      this.lastHeading = h;
+    };
+    this.active = this.sensor.start();
+    this.uiTimer = setInterval(() => {
+      this.heading = Math.round(this.lastHeading);
+    }, 100);
+  }
+
+  aboutToDisappear(): void {
+    if (this.uiTimer !== -1) {
+      clearInterval(this.uiTimer);
+      this.uiTimer = -1;
+    }
+    this.sensor.stop();
+  }
+
+  build() {
+    Column() {
+      this.NavBar()
+      Column() {
+        // 大读数
+        Row() {
+          Text(this.heading.toString() + '°')
+            .fontSize(46)
+            .fontFamily('HarmonyOS Sans')
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.th().textPrimary)
+          Text(' ' + CompassSensor.dirAbbr(this.heading))
+            .fontSize(20)
+            .fontFamily('HarmonyOS Sans')
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.th().accentStrong)
+            .margin({ bottom: 6 })
+        }
+        .alignItems(VerticalAlign.Bottom)
+        .margin({ top: 4, bottom: 8 })
+
+        // 罗盘盘面
+        Stack({ alignContent: Alignment.Center }) {
+          Circle().width(252).height(252)
+            .fill(this.th().gaugeOuter)
+            .shadow({ radius: this.th().isDark ? 0 : 12, color: '#1A000000', offsetY: 6 })
+            .border({ width: 1, color: this.th().cardBorder })
+          // 顶部固定指示三角
+          Polygon().points([[6, 0], [12, 11], [0, 11]]).width(12).height(11)
+            .fill(this.th().danger).offset({ y: -120 })
+
+          // 旋转盘（反向于 heading）
+          Stack({ alignContent: Alignment.Center }) {
+            // 方位字母
+            this.DirLabel('N', this.th().danger, 0)
+            this.DirLabel('E', this.th().textSecondary, 90)
+            this.DirLabel('S', this.th().textSecondary, 180)
+            this.DirLabel('W', this.th().textSecondary, 270)
+            // 指针（红北灰南）
+            Column() {
+              Column().width(7).height(44)
+                .backgroundColor(this.th().danger)
+                .borderRadius({ topLeft: 3, topRight: 3 })
+              Column().width(7).height(44)
+                .backgroundColor(this.th().isDark ? '#3A4452' : '#C3C8D0')
+                .borderRadius({ bottomLeft: 3, bottomRight: 3 })
+            }
+          }
+          .width(212).height(212)
+          .rotate({ angle: -this.heading })
+
+          // 中心轴
+          Circle().width(14).height(14).fill(this.th().textPrimary)
+            .border({ width: 3, color: this.th().bg })
+        }
+        .width(252).height(252)
+        .margin({ top: 8 })
+
+        Row() {
+          Text(this.active ? '磁偏角已校正' : '未读取到磁力计数据')
+            .fontSize(13)
+            .fontColor(this.active ? this.th().textSecondary : this.th().danger)
+            .layoutWeight(1)
+          Text(CompassSensor.dirCn(this.heading) + ' · ±5°')
+            .fontSize(12)
+            .fontFamily('HarmonyOS Sans')
+            .fontColor(this.th().accentStrong)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+        .backgroundColor(this.th().surface)
+        .borderRadius(16)
+        .border({ width: 1, color: this.th().cardBorder })
+        .margin({ top: 20 })
+
+        Text('提示：远离磁性物体、做 8 字晃动可提升精度。读数仅供参考。')
+          .fontSize(11)
+          .fontColor(this.th().textTertiary)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 16 })
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .padding({ left: 22, right: 22 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.th().bg)
+  }
+  // PH_COMPASS
+
+  // 方位字母固定在盘内边缘（angle 度，0=上）
+  @Builder
+  DirLabel(label: string, color: string, angle: number) {
+    Stack({ alignContent: Alignment.Top }) {
+      Text(label)
+        .fontSize(label === 'N' ? 17 : 15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+        .margin({ top: 6 })
+    }
+    .width(212).height(212)
+    .rotate({ angle: angle })
+  }
+
+  @Builder
+  NavBar() {
+    Row() {
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
+      }
+      .onClick(() => router.back())
+      Text('指南针')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.th().textPrimary)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+      Column().width(36).height(36)
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, top: 12, bottom: 8 })
+  }
+}

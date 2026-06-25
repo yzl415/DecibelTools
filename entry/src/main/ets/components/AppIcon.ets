@@ -301,6 +301,103 @@ export struct AppIcon {
     .height(this.iconSize)
   }
 
+  // 指南针：圆环 + 中心指针（上红下灰用单色近似：菱形指针）
+  @Builder
+  IconCompass() {
+    Stack({ alignContent: Alignment.Center }) {
+      Circle().width(this.u(0.92)).height(this.u(0.92)).fill('#00000000')
+        .border({ width: Math.max(1.6, this.u(0.1)), color: this.color })
+      // 指针：细长菱形（用旋转方块近似）
+      Column()
+        .width(this.u(0.12))
+        .height(this.u(0.5))
+        .backgroundColor(this.color)
+        .borderRadius(this.u(0.06))
+        .rotate({ angle: 32 })
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+  }
+
+  // 测距尺：方框 + 中间一条横线（标尺）
+  @Builder
+  IconRuler() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width(this.u(0.86))
+        .height(this.u(0.56))
+        .borderRadius(this.u(0.08))
+        .border({ width: Math.max(1.6, this.u(0.09)), color: this.color })
+      this.Bar(this.u(0.58), this.u(0.09), this.u(0.04))
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+  }
+
+  // 计时器：圆环 + 顶部按钮 + 指针
+  @Builder
+  IconTimer() {
+    Stack({ alignContent: Alignment.Center }) {
+      Circle().width(this.u(0.78)).height(this.u(0.78)).fill('#00000000')
+        .border({ width: Math.max(1.6, this.u(0.1)), color: this.color })
+      // 顶部按钮
+      Column().width(this.u(0.2)).height(this.u(0.1)).backgroundColor(this.color)
+        .borderRadius(this.u(0.04)).offset({ y: -this.u(0.46) })
+      // 指针（竖直向上偏右）
+      Column().width(this.u(0.08)).height(this.u(0.3)).backgroundColor(this.color)
+        .borderRadius(this.u(0.04)).rotate({ angle: 40 })
+        .offset({ x: this.u(0.06), y: -this.u(0.06) })
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+  }
+
+  // 列表（历史）：三行点+线
+  @Builder
+  IconList() {
+    Column({ space: this.u(0.16) }) {
+      this.ListRow()
+      this.ListRow()
+      this.ListRow()
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  ListRow() {
+    Row({ space: this.u(0.12) }) {
+      Circle().width(this.u(0.12)).height(this.u(0.12)).fill(this.color)
+      this.Bar(this.u(0.56), this.u(0.1), this.u(0.05))
+    }
+    .alignItems(VerticalAlign.Center)
+  }
+
+  // 网格（工具）：四个小方块
+  @Builder
+  IconGrid() {
+    Column({ space: this.u(0.12) }) {
+      Row({ space: this.u(0.12) }) {
+        this.GridCell()
+        this.GridCell()
+      }
+      Row({ space: this.u(0.12) }) {
+        this.GridCell()
+        this.GridCell()
+      }
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  GridCell() {
+    Column().width(this.u(0.32)).height(this.u(0.32)).backgroundColor(this.color)
+      .borderRadius(this.u(0.07))
+  }
+
   build() {
     if (this.name === 'today') {
       this.IconToday()
@@ -336,6 +433,16 @@ export struct AppIcon {
       this.IconFlash()
     } else if (this.name === 'gear') {
       this.IconGear()
+    } else if (this.name === 'compass') {
+      this.IconCompass()
+    } else if (this.name === 'ruler') {
+      this.IconRuler()
+    } else if (this.name === 'timer') {
+      this.IconTimer()
+    } else if (this.name === 'list') {
+      this.IconList()
+    } else if (this.name === 'grid') {
+      this.IconGrid()
     }
   }
 }

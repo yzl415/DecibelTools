@@ -1,30 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { SettingsStore } from '../model/SettingsStore';
+import { RecordStore, MeasureRecord } from '../model/RecordStore';
 import { getTheme, AppTheme } from '../model/Theme';
 import { AppIcon } from '../components/AppIcon';
-
-/** 一个工具的元数据 */
-class ToolItem {
-  key: string;
-  icon: string;
-  title: string;
-  desc: string;
-  route: string;
-  constructor(key: string, icon: string, title: string, desc: string, route: string) {
-    this.key = key;
-    this.icon = icon;
-    this.title = title;
-    this.desc = desc;
-    this.route = route;
-  }
-}
-
-const TOOLS: ToolItem[] = [
-  new ToolItem('decibel', 'wave', '分贝仪', '实时测量环境噪音响度', 'pages/DecibelPage'),
-  new ToolItem('angle', 'angle', '角度仪', '测量倾角 / 坡度', 'pages/AnglePage'),
-  new ToolItem('flash', 'flash', '手电筒', '照明 / 频闪爆闪', 'pages/FlashlightPage'),
-];
+import { HomeView } from '../components/HomeView';
+import { HistoryView } from '../components/HistoryView';
+import { SettingsView } from '../components/SettingsView';
 
 @Entry
 @Component
@@ -32,8 +14,11 @@ struct Index {
   @State loaded: boolean = false;
   @State showPrivacy: boolean = false;
   @State showWelcome: boolean = false;
+  @State curTab: number = 0;
+  @State records: MeasureRecord[] = [];
   @StorageProp('themeDark') themeDark: boolean = false;
   private store: SettingsStore = SettingsStore.getInstance();
+  private recordStore: RecordStore = RecordStore.getInstance();
 
   th(): AppTheme {
     return getTheme(this.themeDark);
@@ -42,10 +27,17 @@ struct Index {
   async aboutToAppear(): Promise<void> {
     const ctx = getContext(this) as common.UIAbilityContext;
     await this.store.init(ctx);
+    await this.recordStore.init(ctx);
+    this.records = this.recordStore.records.slice(0);
     AppStorage.setOrCreate('themeDark', this.store.themeDark);
     this.showPrivacy = !this.store.privacyAgreed;
     this.showWelcome = this.store.privacyAgreed && !this.store.onboarded;
     this.loaded = true;
+  }
+
+  onPageShow(): void {
+    // 从分贝仪返回后刷新历史
+    this.records = this.recordStore.records.slice(0);
   }
 
   async agreePrivacy(): Promise<void> {
@@ -64,28 +56,29 @@ struct Index {
     ctx.terminateSelf();
   }
 
-  toggleTheme(): void {
-    const next: boolean = !this.themeDark;
-    AppStorage.setOrCreate('themeDark', next);
-    this.store.setThemeDark(next);
-  }
-
   build() {
     Stack() {
       Column() {
-        this.Header()
-        Scroll() {
-          Column() {
-            ForEach(TOOLS, (t: ToolItem) => {
-              this.ToolCard(t)
-            })
-            this.PrivacyEntry()
+        Tabs({ barPosition: BarPosition.End, index: this.curTab }) {
+          TabContent() {
+            HomeView({ recentDb: this.recordStore.recentAvg() })
           }
-          .width('100%')
-          .padding({ left: 18, right: 18, bottom: 30 })
+          .tabBar(this.BottomTab('工具', 'grid', 0))
+
+          TabContent() {
+            HistoryView({ records: this.records })
+          }
+          .tabBar(this.BottomTab('历史', 'list', 1))
+
+          TabContent() {
+            SettingsView()
+          }
+          .tabBar(this.BottomTab('设置', 'gear', 2))
         }
+        .barBackgroundColor(this.th().navBar)
+        .scrollable(false)
+        .onChange((i: number) => this.curTab = i)
         .layoutWeight(1)
-        .scrollBar(BarState.Off)
       }
       .width('100%')
       .height('100%')
@@ -101,79 +94,26 @@ struct Index {
     .width('100%')
     .height('100%')
   }
-  // PLACEHOLDER_BUILDERS
+  // PH_INDEX
 
   @Builder
-  Header() {
-    Row() {
-      Column() {
-        Text('声活')
-          .fontSize(26)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.th().textPrimary)
-        Text('分贝 · 实用工具箱')
-          .fontSize(13)
-          .fontColor(this.th().textSecondary)
-          .margin({ top: 3 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      Stack() {
-        Circle().width(40).height(40).fill(this.th().surfaceAlt)
-        AppIcon({ name: this.themeDark ? 'sun' : 'moon', color: this.th().textSecondary, iconSize: 20, cutout: this.th().surfaceAlt })
-      }
-      .onClick(() => this.toggleTheme())
+  BottomTab(label: string, icon: string, idx: number) {
+    Column() {
+      AppIcon({
+        name: icon,
+        color: this.curTab === idx ? this.th().accent : this.th().textTertiary,
+        iconSize: 22,
+        cutout: this.th().navBar
+      })
+      Text(label)
+        .fontSize(11)
+        .fontWeight(this.curTab === idx ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.curTab === idx ? this.th().accent : this.th().textTertiary)
+        .margin({ top: 4 })
     }
     .width('100%')
-    .padding({ left: 22, right: 22, top: 18, bottom: 14 })
-  }
-
-  @Builder
-  ToolCard(t: ToolItem) {
-    Row() {
-      Stack() {
-        Column().width(48).height(48).borderRadius(14).backgroundColor(this.th().accentSoft)
-        AppIcon({ name: t.icon, color: this.th().accent, iconSize: 26 })
-      }
-      .margin({ right: 16 })
-
-      Column() {
-        Text(t.title)
-          .fontSize(17)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.th().textPrimary)
-        Text(t.desc)
-          .fontSize(13)
-          .fontColor(this.th().textSecondary)
-          .margin({ top: 4 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      Text('›')
-        .fontSize(22)
-        .fontColor(this.th().textTertiary)
-    }
-    .width('100%')
-    .padding(16)
-    .margin({ top: 12 })
-    .backgroundColor(this.th().surface)
-    .borderRadius(18)
-    .border({ width: this.th().shadowRadius > 0 ? 0 : 1, color: this.th().cardBorder })
-    .onClick(() => router.pushUrl({ url: t.route }))
-  }
-
-  @Builder
-  PrivacyEntry() {
-    Row() {
-      Text('隐私政策')
-        .fontSize(13)
-        .fontColor(this.th().textTertiary)
-        .decoration({ type: TextDecorationType.Underline, color: this.th().textTertiary })
-    }
-    .margin({ top: 26 })
-    .onClick(() => router.pushUrl({ url: 'pages/Privacy' }))
+    .padding({ top: 8, bottom: 6 })
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
@@ -184,11 +124,11 @@ struct Index {
         Column()
           .width(96)
           .height(96)
-          .borderRadius(24)
-          .linearGradient({ angle: 135, colors: [['#5B53E8', 0], ['#7C76F0', 1]] })
+          .borderRadius(26)
+          .linearGradient({ angle: 135, colors: [['#00D68F', 0], ['#00B377', 1]] })
         AppIcon({ name: 'wave', color: '#FFFFFF', iconSize: 52 })
       }
-      Text('声活·分贝工具箱')
+      Text('声活 · 分贝工具箱')
         .fontSize(26)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.th().textPrimary)
@@ -200,8 +140,8 @@ struct Index {
 
       Column({ space: 16 }) {
         this.Feature('分贝仪：实时测量环境噪音')
-        this.Feature('角度仪：测倾角、坡度、水平')
-        this.Feature('手电筒：照明与频闪爆闪')
+        this.Feature('角度仪 / 指南针：测倾角与方位')
+        this.Feature('测距尺 / 计时器：日常小工具')
         this.Feature('全部本地运行，不联网不上传')
       }
       .alignItems(HorizontalAlign.Start)
@@ -213,7 +153,7 @@ struct Index {
         .height(52)
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#FFFFFF')
+        .fontColor(this.th().accentText)
         .backgroundColor(this.th().accent)
         .borderRadius(16)
         .onClick(() => this.finishWelcome())
@@ -244,7 +184,7 @@ struct Index {
   PrivacyGate() {
     Column() {
       Column() {
-        Text('欢迎使用声活·分贝工具箱')
+        Text('欢迎使用声活 · 分贝工具箱')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.th().textPrimary)
@@ -252,7 +192,7 @@ struct Index {
         Text() {
           Span('在使用前，请阅读并同意')
           Span('《隐私政策》')
-            .fontColor(this.th().accent)
+            .fontColor(this.th().accentStrong)
             .onClick(() => router.pushUrl({ url: 'pages/Privacy' }))
           Span('。我们高度重视你的隐私：分贝仪麦克风数据仅在本机实时计算、不录音不上传，全部功能均在本地完成，无广告、无第三方共享。')
         }
@@ -266,7 +206,7 @@ struct Index {
           .height(48)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
+          .fontColor(this.th().accentText)
           .backgroundColor(this.th().accent)
           .borderRadius(14)
           .margin({ top: 22 })

@@ -1,27 +1,10 @@
 import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, TOOL_GREEN, TOOL_INDIGO } from '../model/Theme';
 import { DecibelMeter } from '../model/DecibelMeter';
 import { SettingsStore } from '../model/SettingsStore';
-
-/** 噪音参考级别 */
-class NoiseRef {
-  max: number;
-  label: string;
-  constructor(max: number, label: string) {
-    this.max = max;
-    this.label = label;
-  }
-}
-
-const REFS: NoiseRef[] = [
-  new NoiseRef(30, '极安静 · 如深夜卧室'),
-  new NoiseRef(45, '安静 · 如图书馆'),
-  new NoiseRef(60, '适中 · 如普通交谈'),
-  new NoiseRef(75, '较吵 · 如繁忙街道'),
-  new NoiseRef(90, '吵闹 · 如地铁车厢'),
-  new NoiseRef(200, '嘈杂 · 需注意听力保护'),
-];
+import { RecordStore } from '../model/RecordStore';
+import { AppIcon } from '../components/AppIcon';
 
 @Entry
 @Component
@@ -30,21 +13,32 @@ struct DecibelPage {
   @State current: number = 0;
   @State peak: number = 0;
   @State avg: number = 0;
+  @State minDb: number = 0;
   @State measuring: boolean = false;
   @State denied: boolean = false;
+  @State elapsed: number = 0;          // 秒
+  @State spectrum: number[] = [];
+  @State weighting: string = 'A';
+  @State response: string = 'FAST';
   private meter: DecibelMeter = new DecibelMeter();
   private store: SettingsStore = SettingsStore.getInstance();
+  private recordStore: RecordStore = RecordStore.getInstance();
   private sum: number = 0;
   private count: number = 0;
   private uiTimer: number = -1;
   private latest: number = 0;
+  private startTs: number = 0;
 
   th(): AppTheme {
     return getTheme(this.themeDark);
   }
 
-  async aboutToAppear(): Promise<void> {
+  aboutToAppear(): void {
+    this.weighting = this.store.weighting;
+    this.response = this.store.response;
     this.meter.setCalibration(this.store.calibration);
+    this.meter.setWeighting(this.weighting);
+    this.meter.setResponse(this.response);
     this.meter.onDb = (db: number) => {
       this.latest = db;
       this.sum += db;
@@ -52,14 +46,16 @@ struct DecibelPage {
       if (db > this.peak) {
         this.peak = db;
       }
+      if (this.minDb === 0 || db < this.minDb) {
+        this.minDb = db;
+      }
     };
   }
 
   aboutToDisappear(): void {
-    this.stop();
+    this.stop(false);
   }
 
-  /** 申请麦克风权限并开始 */
   async requestAndStart(): Promise<void> {
     const ctx = getContext(this) as common.UIAbilityContext;
     const atManager = abilityAccessCtrl.createAtManager();
@@ -82,29 +78,36 @@ struct DecibelPage {
     this.sum = 0;
     this.count = 0;
     this.peak = 0;
+    this.minDb = 0;
+    this.elapsed = 0;
+    this.startTs = Date.now();
     const ok: boolean = await this.meter.start();
     if (!ok) {
       this.denied = true;
       return;
     }
     this.measuring = true;
-    // UI 刷新节流：每 200ms 更新一次显示，避免回调过密导致频繁重绘
     this.uiTimer = setInterval(() => {
       this.current = Math.round(this.latest);
       this.avg = this.count > 0 ? Math.round(this.sum / this.count) : 0;
-    }, 200);
+      this.elapsed = Math.floor((Date.now() - this.startTs) / 1000);
+      this.spectrum = this.meter.getSpectrum();
+    }, 150);
   }
 
-  async stop(): Promise<void> {
+  async stop(save: boolean): Promise<void> {
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
     if (this.measuring) {
       await this.meter.stop();
-      // 记录历史最高
       if (this.peak > this.store.historyMaxDb) {
         await this.store.setHistoryMaxDb(Math.round(this.peak));
+      }
+      if (save && this.count > 0 && this.elapsed >= 1) {
+        await this.recordStore.add('测量记录', this.elapsed,
+          Math.round(this.minDb), this.avg, Math.round(this.peak));
       }
     }
     this.measuring = false;
@@ -112,101 +115,79 @@ struct DecibelPage {
 
   toggle(): void {
     if (this.measuring) {
-      this.stop();
+      this.stop(true);
     } else {
       this.requestAndStart();
     }
   }
 
-  refLabel(): string {
-    for (const r of REFS) {
-      if (this.current <= r.max) {
-        return r.label;
-      }
-    }
-    return REFS[REFS.length - 1].label;
+  setWeighting(w: string): void {
+    this.weighting = w;
+    this.meter.setWeighting(w);
+    this.store.setWeighting(w);
   }
 
-  // 根据分贝映射弧形进度颜色：低绿、中黄、高红
-  dbColor(): string {
-    if (this.current < 50) {
-      return this.th().success;
-    } else if (this.current < 75) {
-      return this.th().warn;
-    }
-    return this.th().danger;
+  setResponse(r: string): void {
+    this.response = r;
+    this.meter.setResponse(r);
+    this.store.setResponse(r);
   }
-  // PLACEHOLDER_BUILD
+
+  // dB -> 指针角度（30dB≈-80°，120dB≈+70°）
+  needleAngle(): number {
+    const db: number = this.measuring ? this.current : 30;
+    const c: number = Math.max(30, Math.min(120, db));
+    return -80 + (c - 30) / 90 * 150;
+  }
+
+  dispDb(): string {
+    return this.measuring ? this.current.toString() : '--';
+  }
+
+  fmtElapsed(): string {
+    const m: number = Math.floor(this.elapsed / 60);
+    const s: number = this.elapsed % 60;
+    return m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+  }
+  // PH_DB
 
   build() {
     Column() {
-      this.NavBar('分贝仪')
+      this.NavBar()
       Scroll() {
         Column() {
-          // 大数字 + 单位
-          Stack({ alignContent: Alignment.Center }) {
-            // 进度环底
-            Progress({ value: this.current, total: 120, type: ProgressType.Ring })
-              .width(240)
-              .height(240)
-              .color(this.dbColor())
-              .backgroundColor(this.th().track)
-              .style({ strokeWidth: 14 })
-            Column() {
-              Text(this.measuring ? this.current.toString() : '--')
-                .fontSize(72)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this.th().textPrimary)
-              Text('dB')
-                .fontSize(20)
-                .fontColor(this.th().textSecondary)
-                .margin({ top: 2 })
-              Text(this.measuring ? this.refLabel() : '点击下方开始测量')
-                .fontSize(13)
-                .fontColor(this.th().textTertiary)
-                .margin({ top: 8 })
-            }
+          this.Toggles()
+          this.Gauge()
+          if (this.measuring) {
+            this.Spectrum()
+            this.Stats()
+            this.StopBtn()
+          } else {
+            Text('点击开始，记录这段时间的噪音变化')
+              .fontSize(12)
+              .fontColor(this.th().textSecondary)
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .margin({ top: 16, bottom: 12 })
+            this.StartBtn()
           }
-          .margin({ top: 24 })
-
-          // 峰值 / 平均
-          Row() {
-            this.StatBox('平均', this.measuring ? this.avg.toString() : '--')
-            this.StatBox('峰值', this.measuring ? this.peak.toString() : '--')
-            this.StatBox('历史最高', this.store.historyMaxDb > 0 ? this.store.historyMaxDb.toString() : '--')
-          }
-          .width('100%')
-          .margin({ top: 30 })
-
-          // 开始/停止按钮
-          Button(this.measuring ? '停止' : '开始测量')
-            .width('100%')
-            .height(52)
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.measuring ? this.th().danger : this.th().accent)
-            .borderRadius(16)
-            .margin({ top: 32 })
-            .onClick(() => this.toggle())
-
           if (this.denied) {
             Text('未获得麦克风权限，请在系统设置中开启后重试。仅用于本地测量噪音，不录音、不上传。')
               .fontSize(13)
               .fontColor(this.th().danger)
-              .margin({ top: 16 })
               .textAlign(TextAlign.Center)
+              .margin({ top: 16 })
           }
-
           Text('提示：分贝读数为估算值，受麦克风灵敏度影响，仅供参考。可在设置中校准。')
-            .fontSize(12)
-            .lineHeight(20)
+            .fontSize(11)
+            .lineHeight(18)
             .fontColor(this.th().textTertiary)
             .width('100%')
-            .margin({ top: 24 })
+            .textAlign(TextAlign.Center)
+            .margin({ top: 18 })
         }
         .width('100%')
-        .padding({ left: 22, right: 22, bottom: 40 })
+        .padding({ left: 22, right: 22, bottom: 30 })
       }
       .layoutWeight(1)
       .scrollBar(BarState.Off)
@@ -217,40 +198,252 @@ struct DecibelPage {
   }
 
   @Builder
-  StatBox(label: string, value: string) {
-    Column() {
-      Text(value)
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.th().textPrimary)
-      Text(label)
-        .fontSize(12)
-        .fontColor(this.th().textSecondary)
-        .margin({ top: 4 })
+  Toggles() {
+    Row({ space: 8 }) {
+      // 计权
+      Row() {
+        this.Seg('dB(A)', this.weighting === 'A', TOOL_GREEN, () => this.setWeighting('A'))
+        this.Seg('dB(C)', this.weighting === 'C', TOOL_GREEN, () => this.setWeighting('C'))
+      }
+      .padding(2)
+      .backgroundColor(this.th().surface)
+      .borderRadius(9)
+      .border({ width: 1, color: this.th().cardBorder })
+      // 时间计权
+      Row() {
+        this.Seg('FAST', this.response === 'FAST', TOOL_INDIGO, () => this.setResponse('FAST'))
+        this.Seg('SLOW', this.response === 'SLOW', TOOL_INDIGO, () => this.setResponse('SLOW'))
+      }
+      .padding(2)
+      .backgroundColor(this.th().surface)
+      .borderRadius(9)
+      .border({ width: 1, color: this.th().cardBorder })
     }
-    .layoutWeight(1)
-    .padding({ top: 16, bottom: 16 })
-    .backgroundColor(this.th().surface)
-    .borderRadius(14)
-    .margin({ left: 4, right: 4 })
-    .border({ width: this.th().shadowRadius > 0 ? 0 : 1, color: this.th().cardBorder })
+    .justifyContent(FlexAlign.Center)
+    .width('100%')
+    .margin({ top: 4, bottom: 10 })
   }
 
   @Builder
-  NavBar(title: string) {
-    Row() {
-      Text('‹ 返回')
-        .fontSize(16)
-        .fontColor(this.th().accent)
-        .onClick(() => router.back())
-        .layoutWeight(1)
-      Text(title)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.th().textPrimary)
-      Blank().layoutWeight(1)
+  Seg(label: string, active: boolean, activeColor: string, cb: () => void) {
+    Text(label)
+      .fontSize(11)
+      .fontFamily('HarmonyOS Sans')
+      .fontWeight(FontWeight.Bold)
+      .fontColor(active ? this.th().accentText : this.th().textTertiary)
+      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      .backgroundColor(active ? activeColor : '#00000000')
+      .borderRadius(6)
+      .onClick(cb)
+  }
+
+  @Builder
+  Gauge() {
+    Stack({ alignContent: Alignment.Center }) {
+      // 表盘外圈
+      Circle().width(260).height(260)
+        .fill(this.th().gaugeOuter)
+        .shadow({ radius: this.th().isDark ? 0 : 14, color: '#22000000', offsetY: 6 })
+      // 彩色弧（sweepGradient），inset 18
+      Circle().width(224).height(224)
+        .fill(this.th().gaugeInner)
+      Stack() {}
+        .width(224).height(224)
+        .borderRadius(112)
+        .sweepGradient({
+          center: ['50%', '50%'],
+          start: 135,
+          end: 495,
+          colors: [
+            ['#22C55E', 0.0], ['#84CC16', 0.17], ['#EAB308', 0.29],
+            ['#F59E0B', 0.37], ['#EF4444', 0.46], [this.th().gaugeInner, 0.75],
+            [this.th().gaugeInner, 1.0]
+          ]
+        })
+        .opacity(this.measuring ? 0.95 : 0.5)
+      // 中心遮罩
+      Circle().width(188).height(188).fill(this.th().gaugeCore)
+
+      // 刻度数字
+      Text('30').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+        .position({ x: 52, y: 178 })
+      Text('60').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+        .position({ x: 52, y: 64 })
+      Text('90').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+        .position({ x: 190, y: 64 })
+      Text('120').fontSize(11).fontFamily('HarmonyOS Sans').fontColor(this.th().textSecondary)
+        .position({ x: 186, y: 178 })
+
+      // 指针（满尺寸容器旋转，三角在顶部）
+      Stack({ alignContent: Alignment.Top }) {
+        Polygon()
+          .points([[7, 0], [14, 16], [0, 16]])
+          .width(14).height(16)
+          .fill(levelColor(this.measuring ? this.current : 35))
+          .margin({ top: 24 })
+      }
+      .width(260).height(260)
+      .rotate({ angle: this.needleAngle() })
+
+      // 中央读数
+      Column() {
+        Text('SOUND LEVEL')
+          .fontSize(10)
+          .fontFamily('HarmonyOS Sans')
+          .fontColor(this.th().textTertiary)
+          .letterSpacing(2.2)
+        Text(this.dispDb())
+          .fontSize(64)
+          .fontFamily('HarmonyOS Sans')
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.th().textPrimary)
+          .margin({ top: 4 })
+        Text('dB(' + this.weighting + ') · ' + this.response)
+          .fontSize(12)
+          .fontFamily('HarmonyOS Sans')
+          .fontColor(this.th().textSecondary)
+          .margin({ top: 4 })
+        if (this.measuring) {
+          Row() {
+            Circle().width(6).height(6).fill(levelColor(this.current))
+            Text(levelDesc(this.current))
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(levelColor(this.current))
+              .margin({ left: 6 })
+          }
+          .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+          .backgroundColor(withAlpha(levelColor(this.current), '22'))
+          .borderRadius(20)
+          .margin({ top: 11 })
+        }
+      }
+      .width(188)
+    }
+    .width(260)
+    .height(260)
+    .margin({ top: 4 })
+  }
+
+  @Builder
+  Spectrum() {
+    Row({ space: 3 }) {
+      ForEach(this.spectrum, (h: number) => {
+        Column()
+          .layoutWeight(1)
+          .height(42 * h)
+          .borderRadius(2)
+          .backgroundColor(levelColor(30 + h * 80))
+      })
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 14, bottom: 10 })
+    .height(42)
+    .alignItems(VerticalAlign.Bottom)
+    .margin({ top: 16, bottom: 16 })
+  }
+
+  @Builder
+  Stats() {
+    Row() {
+      this.StatCell('MIN', Math.round(this.minDb).toString(), this.th().success)
+      Column().width(1).height(36).backgroundColor(this.th().divider)
+      this.StatCell('AVG · Leq', this.avg.toString(), this.th().textPrimary)
+      Column().width(1).height(36).backgroundColor(this.th().divider)
+      this.StatCell('MAX · 峰值', Math.round(this.peak).toString(), this.th().danger)
+    }
+    .width('100%')
+    .padding({ top: 6, bottom: 6 })
+    .backgroundColor(this.th().surface)
+    .borderRadius(16)
+    .border({ width: 1, color: this.th().cardBorder })
+    .margin({ bottom: 14 })
+  }
+
+  @Builder
+  StatCell(label: string, value: string, color: string) {
+    Column() {
+      Text(value)
+        .fontSize(21)
+        .fontFamily('HarmonyOS Sans')
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+      Text(label)
+        .fontSize(9)
+        .fontFamily('HarmonyOS Sans')
+        .fontColor(this.th().textTertiary)
+        .letterSpacing(1.2)
+        .margin({ top: 5 })
+    }
+    .layoutWeight(1)
+    .padding({ top: 13, bottom: 13 })
+  }
+
+  @Builder
+  StartBtn() {
+    Row() {
+      Circle().width(13).height(13).fill(this.th().accent)
+      Text('开始测量')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.th().accentStrong)
+        .margin({ left: 10 })
+    }
+    .justifyContent(FlexAlign.Center)
+    .width('100%')
+    .padding({ top: 17, bottom: 17 })
+    .backgroundColor(this.th().accentSoft)
+    .borderRadius(18)
+    .border({ width: 1, color: withAlpha(this.th().accent, '40') })
+    .onClick(() => this.toggle())
+  }
+
+  @Builder
+  StopBtn() {
+    Row() {
+      Column().width(13).height(13).borderRadius(3).backgroundColor(this.th().danger)
+      Text('停止测量')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.th().danger)
+        .margin({ left: 9 })
+      Text(this.fmtElapsed())
+        .fontSize(13)
+        .fontFamily('HarmonyOS Sans')
+        .fontColor(this.th().textTertiary)
+        .margin({ left: 10 })
+    }
+    .justifyContent(FlexAlign.Center)
+    .width('100%')
+    .padding({ top: 16, bottom: 16 })
+    .backgroundColor(withAlpha(this.th().danger, '1A'))
+    .borderRadius(16)
+    .border({ width: 1, color: withAlpha(this.th().danger, '40') })
+    .onClick(() => this.toggle())
+  }
+
+  @Builder
+  NavBar() {
+    Row() {
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
+      }
+      .onClick(() => router.back())
+      Text('分贝仪')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.th().textPrimary)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        AppIcon({ name: 'list', color: this.th().textSecondary, iconSize: 16 })
+      }
+      .onClick(() => router.back())
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, top: 12, bottom: 8 })
   }
 }
