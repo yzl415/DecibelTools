@@ -41,10 +41,6 @@ struct AnglePage {
     this.sensor.stop();
   }
 
-  isLevel(): boolean {
-    return Math.abs(this.pitch) < 1 && Math.abs(this.roll) < 1;
-  }
-
   calibrate(): void {
     this.calPitch = this.lastPitch;
     this.calRoll = this.lastRoll;
@@ -73,19 +69,28 @@ struct AnglePage {
               color: this.th().isDark ? '#80000000' : '#1A000000',
               offsetY: 6
             })
-          Circle().width(168).height(168).fill('#00000000')
-            .border({ width: 1.5, color: this.th().divider })
-          Circle().width(80).height(80).fill('#00000000')
-            .border({ width: 1.5, color: this.th().divider })
+          // 两道同心圆环：Circle 是 Shape，空心环用 stroke 描边（用 border 会画成方框）
+          Circle().width(168).height(168)
+            .fillOpacity(0)
+            .stroke(this.th().divider).strokeWidth(1.5)
+          Circle().width(80).height(80)
+            .fillOpacity(0)
+            .stroke(this.th().isDark ? '#2E3742' : this.th().divider).strokeWidth(1.5)
           Column().width(212).height(1.5).backgroundColor(this.th().divider)
           Column().width(1.5).height(212).backgroundColor(this.th().divider)
-          // 目标环
-          Circle().width(62).height(62).fill('#00000000')
-            .border({ width: 2, color: withAlpha(TOOL_GREEN, '73') })
-          // 气泡
-          Circle().width(50).height(50)
-            .fill(this.isLevel() ? this.th().accent : TOOL_INDIGO)
-            .shadow({ radius: 16, color: withAlpha(this.isLevel() ? TOOL_GREEN : TOOL_INDIGO, '99') })
+          // 目标环（翠绿描边）
+          Circle().width(62).height(62)
+            .fillOpacity(0)
+            .stroke(TOOL_GREEN).strokeWidth(2).strokeOpacity(0.45)
+          // 气泡：始终翠绿径向渐变，深色读数（对齐设计稿）
+          Column()
+            .width(50).height(50).borderRadius(25)
+            .radialGradient({
+              center: ['38%', '32%'],
+              radius: 46,
+              colors: [['#3DF0B5', 0.0], [TOOL_GREEN, 1.0]]
+            })
+            .shadow({ radius: 18, color: withAlpha(TOOL_GREEN, '99') })
             .offset({
               x: Math.max(-95, Math.min(95, this.roll * 3)),
               y: Math.max(-95, Math.min(95, -this.pitch * 3))
@@ -93,23 +98,13 @@ struct AnglePage {
           Text(this.tilt().toFixed(1) + '°')
             .fontSize(15)
             .fontFamily(MONO_B)
-            .fontColor(this.isLevel() ? '#FFFFFF' : '#FFFFFF')
+            .fontColor('#0B0C10')
             .offset({
               x: Math.max(-95, Math.min(95, this.roll * 3)),
               y: Math.max(-95, Math.min(95, -this.pitch * 3))
             })
         }
         .margin({ top: 6 })
-
-        Row() {
-          Circle().width(6).height(6).fill(this.isLevel() ? this.th().success : this.th().textTertiary)
-          Text(this.isLevel() ? '已水平' : '调整中')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.isLevel() ? this.th().success : this.th().textSecondary)
-            .margin({ left: 6 })
-        }
-        .margin({ top: 18 })
 
         Row({ space: 9 }) {
           this.AngleBox('横向 ROLL', this.roll)
@@ -141,12 +136,6 @@ struct AnglePage {
             .fontColor(this.th().danger)
             .margin({ top: 16 })
         }
-        Text('提示：将手机平放后点击校准归零。读数仅供参考。')
-          .fontSize(11)
-          .fontColor(this.th().textTertiary)
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .margin({ top: 18 })
       }
       .layoutWeight(1)
       .width('100%')

@@ -29,9 +29,34 @@ struct DecibelPage {
   private uiTimer: number = -1;
   private latest: number = 0;
   private startTs: number = 0;
+  // 表盘彩色弧用 Canvas 绘制（标准 HTML5 角度：0°=3点钟，顺时针为正），
+  // 避免 sweepGradient 角度约定不确定 + end 越界(>360) 被忽略的问题。
+  private arcSettings: RenderingContextSettings = new RenderingContextSettings(true);
+  private arcCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.arcSettings);
 
   th(): AppTheme {
     return getTheme(this.themeDark);
+  }
+
+  // 画表盘彩色弧：标准 HTML5 角度(0°=3点钟,顺时针)。圆心(130,130)，半径110，线宽12，
+  // 对应设计稿 inset14(外232)→inset26(内208) 之间的 12px 环。绿起左下135°→红收右下405°，底部90°缺口透明。
+  drawGaugeArc(): void {
+    this.arcCtx.clearRect(0, 0, 260, 260);
+    this.arcSeg('#22C55E', 135, 195);   // 安静 绿
+    this.arcSeg('#84CC16', 195, 240);   // 适中 黄绿
+    this.arcSeg('#EAB308', 240, 270);   // 一般 黄
+    this.arcSeg('#F59E0B', 270, 300);   // 较吵 橙
+    this.arcSeg('#EF4444', 300, 405);   // 吵闹 红（收于右下45°）
+  }
+
+  // 单个色段；起点回退 0.6° 与上一段重叠，由后画的段盖住接缝，消除抗锯齿缝隙。
+  arcSeg(color: string, startDeg: number, endDeg: number): void {
+    const d2r: number = Math.PI / 180;
+    this.arcCtx.beginPath();
+    this.arcCtx.lineWidth = 12;
+    this.arcCtx.strokeStyle = color;
+    this.arcCtx.arc(130, 130, 110, (startDeg - 0.6) * d2r, endDeg * d2r, false);
+    this.arcCtx.stroke();
   }
 
   aboutToAppear(): void {
@@ -162,6 +187,21 @@ struct DecibelPage {
           this.Toggles()
           this.Gauge()
           if (this.measuring) {
+            Row() {
+              Circle().width(6).height(6).fill(levelColor(this.current))
+                .shadow({ radius: 6, color: withAlpha(levelColor(this.current), 'CC') })
+              Text(levelDesc(this.current))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(levelColor(this.current))
+                .margin({ left: 6 })
+            }
+            .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+            .backgroundColor(withAlpha(levelColor(this.current), '22'))
+            .borderRadius(20)
+            .margin({ top: 10 })
+          }
+          if (this.measuring) {
             this.Spectrum()
             this.Stats()
             this.StopBtn()
@@ -278,25 +318,18 @@ struct DecibelPage {
             ['#00000000', 0.45]
           ]
         })
-      // 彩色弧（sweepGradient），inset 18
-      Circle().width(224).height(224)
+      // 彩色弧底盘：inset14 → 232 圆（设计稿 conic 缺口处露出的暗底）
+      Circle().width(232).height(232)
         .fill(this.th().gaugeInner)
-      Stack() {}
-        .width(224).height(224)
-        .borderRadius(112)
-        .sweepGradient({
-          center: ['50%', '50%'],
-          start: 135,
-          end: 495,
-          colors: [
-            ['#22C55E', 0.0], ['#84CC16', 0.17], ['#EAB308', 0.29],
-            ['#F59E0B', 0.37], ['#EF4444', 0.46], [this.th().gaugeInner, 0.75],
-            [this.th().gaugeInner, 1.0]
-          ]
-        })
-        .opacity(this.measuring ? 0.95 : 0.5)
-      // 中心遮罩（凹陷核心 + 下沿暗影）
-      Circle().width(188).height(188)
+      // 彩色刻度弧：Canvas 硬边分段色带。标准 HTML5 角度(0°=3点钟,顺时针)。260 画布、圆心(130,130)、半径110。
+      // 绿起左下(135°)，顺时针经左/顶/右，收红于右下(405°)；底部 45°→135°(90°) 透明缺口。
+      Canvas(this.arcCtx)
+        .width(260).height(260)
+        .backgroundColor('#00000000')
+        .opacity(this.measuring ? 1.0 : 0.45)
+        .onReady(() => this.drawGaugeArc())
+      // 中心遮罩（凹陷核心 + 下沿暗影）：inset26 → 208
+      Circle().width(208).height(208)
         .fill(this.th().gaugeCore)
         .shadow({ radius: 6, color: this.th().isDark ? '#B3000000' : '#1A000000', offsetY: 1 })
 
@@ -306,24 +339,14 @@ struct DecibelPage {
       this.Tick(45)
       this.Tick(135)
 
-      // 刻度数字（等宽 mono）
-      Text('30').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
-        .position({ x: 52, y: 178 })
-      Text('60').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
-        .position({ x: 52, y: 64 })
-      Text('90').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
-        .position({ x: 190, y: 64 })
-      Text('120').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
-        .position({ x: 186, y: 178 })
-
-      // 指针（满尺寸容器旋转，三角在顶部，带等级辉光）
+      // 指针（满尺寸容器旋转，三角尖朝圆心、底边贴弧，带等级辉光）
       Stack({ alignContent: Alignment.Top }) {
         Polygon()
-          .points([[7, 0], [14, 16], [0, 16]])
-          .width(14).height(16)
-          .fill(levelColor(this.measuring ? this.current : 35))
-          .shadow({ radius: 8, color: withAlpha(levelColor(this.measuring ? this.current : 35), 'B3') })
-          .margin({ top: 24 })
+          .points([[0, 0], [14, 0], [7, 15]])
+          .width(14).height(15)
+          .fill(this.measuring ? levelColor(this.current) : '#22C55E')
+          .shadow({ radius: 7, color: withAlpha(this.measuring ? levelColor(this.current) : '#22C55E', 'B3') })
+          .margin({ top: 22 })
       }
       .width(260).height(260)
       .rotate({ angle: this.needle })
@@ -336,35 +359,32 @@ struct DecibelPage {
           .fontColor(this.th().textTertiary)
           .letterSpacing(2.2)
         Text(this.measuring ? this.current.toString() : '--')
-          .fontSize(68)
+          .fontSize(60)
           .fontFamily(MONO_B)
           .fontColor(this.th().textPrimary)
-          .letterSpacing(-2.7)
-          .lineHeight(56)
-          .margin({ top: 6 })
+          .letterSpacing(-2.4)
+          .lineHeight(50)
+          .margin({ top: 4 })
         Text('dB(' + this.weighting + ') · ' + this.response)
-          .fontSize(12)
+          .fontSize(13)
           .fontFamily(MONO)
           .fontColor(this.th().textSecondary)
           .letterSpacing(0.5)
           .margin({ top: 4 })
-        if (this.measuring) {
-          Row() {
-            Circle().width(6).height(6).fill(levelColor(this.current))
-              .shadow({ radius: 6, color: withAlpha(levelColor(this.current), 'CC') })
-            Text(levelDesc(this.current))
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(levelColor(this.current))
-              .margin({ left: 6 })
-          }
-          .padding({ left: 12, right: 12, top: 4, bottom: 4 })
-          .backgroundColor(withAlpha(levelColor(this.current), '22'))
-          .borderRadius(20)
-          .margin({ top: 11 })
-        }
       }
-      .width(188)
+      .width(208)
+
+      // 刻度数字：与设计稿一致，中心点落在 (66,68)/(194,68)/(66,192)/(194,192)，
+      // markAnchor 50% 复刻 translate(-50%,-50%)，半径约89落在指针尖(半径93)以内，永不被压。
+      // 放最后渲染，双保险盖在指针之上。
+      Text('30').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
+        .position({ x: 66, y: 192 }).markAnchor({ x: '50%', y: '50%' })
+      Text('60').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
+        .position({ x: 66, y: 68 }).markAnchor({ x: '50%', y: '50%' })
+      Text('90').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
+        .position({ x: 194, y: 68 }).markAnchor({ x: '50%', y: '50%' })
+      Text('120').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
+        .position({ x: 194, y: 192 }).markAnchor({ x: '50%', y: '50%' })
     }
     .width(260)
     .height(260)
