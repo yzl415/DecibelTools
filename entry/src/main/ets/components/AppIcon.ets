@@ -374,6 +374,23 @@ export struct AppIcon {
     .alignItems(VerticalAlign.Center)
   }
 
+  // 信息：圆环 + 顶点 + 竖条（i）
+  @Builder
+  IconInfo() {
+    Stack({ alignContent: Alignment.Center }) {
+      Circle().width(this.u(0.92)).height(this.u(0.92)).fill('#00000000')
+        .border({ width: Math.max(1.6, this.u(0.1)), color: this.color })
+      Column() {
+        Circle().width(this.u(0.13)).height(this.u(0.13)).fill(this.color)
+        Column().width(this.u(0.12)).height(this.u(0.34)).backgroundColor(this.color)
+          .borderRadius(this.u(0.06)).margin({ top: this.u(0.06) })
+      }
+      .justifyContent(FlexAlign.Center)
+    }
+    .width(this.iconSize)
+    .height(this.iconSize)
+  }
+
   // 网格（工具）：四个小方块
   @Builder
   IconGrid() {
@@ -443,6 +460,8 @@ export struct AppIcon {
       this.IconList()
     } else if (this.name === 'grid') {
       this.IconGrid()
+    } else if (this.name === 'info') {
+      this.IconInfo()
     }
   }
 }

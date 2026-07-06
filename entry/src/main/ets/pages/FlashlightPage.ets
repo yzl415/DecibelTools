@@ -3,6 +3,7 @@ import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO } from '../model/Theme';
 import { TorchController } from '../model/TorchController';
 import { tapFeedback } from '../model/Haptics';
+import { AppIcon } from '../components/AppIcon';
 
 @Entry
 @Component
@@ -82,6 +83,16 @@ struct FlashlightPage {
     return '已开启';
   }
 
+  showInfo(): void {
+    AlertDialog.show({
+      title: '关于手电筒',
+      message: '点击中央圆盘开关手电筒。常亮 / 频闪 / SOS 三种模式可切换：'
+        + '频闪模式下滑块调节闪烁频率，SOS 循环发送国际摩斯求救信号。'
+        + '受系统限制，本设备的手电筒亮度不可调节。频闪可能引起不适，光敏性癫痫人群慎用。',
+      confirm: { value: '知道了', action: () => {} }
+    });
+  }
+
   build() {
     Column() {
       this.NavBar()
@@ -130,27 +141,35 @@ struct FlashlightPage {
           .fontColor(this.th().textTertiary)
           .margin({ top: 3, bottom: 22 })
 
-        // 亮度（频闪频率复用为强度展示）
+        // 频闪：频率控制；常亮 / SOS：亮度不可调（系统限制，诚实降级）
         Column() {
           Row() {
             Text(this.mode === 'strobe' ? '频闪频率' : '亮度')
               .fontSize(12)
               .fontColor(this.th().textSecondary)
               .layoutWeight(1)
-            Text(this.mode === 'strobe' ? this.freqHz + ' 次/秒' : '100%')
+            Text(this.mode === 'strobe' ? this.freqHz + ' 次/秒' : '不可调')
               .fontSize(12)
               .fontFamily(MONO)
-              .fontColor(TOOL_ORANGE)
+              .fontColor(this.mode === 'strobe' ? TOOL_ORANGE : this.th().textTertiary)
           }
           .width('100%')
           .margin({ bottom: 6 })
-          Slider({ value: this.freqHz, min: 1, max: 20, step: 1 })
+          Slider({ value: this.mode === 'strobe' ? this.freqHz : 20, min: 1, max: 20, step: 1 })
             .width('100%')
             .blockColor('#FFFFFF')
-            .selectedColor(TOOL_ORANGE)
+            .selectedColor(this.mode === 'strobe' ? TOOL_ORANGE : this.th().textTertiary)
             .trackColor(this.th().track)
             .enabled(this.mode === 'strobe')
+            .opacity(this.mode === 'strobe' ? 1 : 0.5)
             .onChange((v: number) => this.setFreq(Math.round(v)))
+          if (this.mode !== 'strobe') {
+            Text('当前设备不支持调节手电筒亮度')
+              .fontSize(11)
+              .fontColor(this.th().textTertiary)
+              .width('100%')
+              .margin({ top: 8 })
+          }
         }
         .width('100%')
         .padding(16)
@@ -222,7 +241,12 @@ struct FlashlightPage {
         .fontColor(this.th().textPrimary)
         .layoutWeight(1)
         .textAlign(TextAlign.Center)
-      Column().width(36).height(36)
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        AppIcon({ name: 'info', color: this.th().textSecondary, iconSize: 16 })
+      }
+      .onClick(() => this.showInfo())
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 8 })

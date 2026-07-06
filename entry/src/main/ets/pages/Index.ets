@@ -1,8 +1,12 @@
-import { common } from '@kit.AbilityKit';
+import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
 import { getTheme, AppTheme } from '../model/Theme';
+import { DecibelMeter } from '../model/DecibelMeter';
+import { AngleSensor } from '../model/AngleSensor';
+import { CompassSensor } from '../model/CompassSensor';
+import { MOCK_HARDWARE } from '../model/MockConfig';
 import { AppIcon } from '../components/AppIcon';
 import { HomeView } from '../components/HomeView';
 import { HistoryView } from '../components/HistoryView';
@@ -17,8 +21,26 @@ struct Index {
   @State curTab: number = 0;
   @State records: MeasureRecord[] = [];
   @StorageProp('themeDark') themeDark: boolean = false;
+  // 首页实时预览状态（下传给 HomeView）
+  @State liveActive: boolean = false;   // 麦克风预览是否在跑
+  @State homeDb: number = 0;
+  @State homeSpectrum: number[] = [];
+  @State homeTilt: number = -1;         // <0 表示无角度数据
+  @State homeHeading: number = -1;      // <0 表示无方位数据
   private store: SettingsStore = SettingsStore.getInstance();
   private recordStore: RecordStore = RecordStore.getInstance();
+  // 首页实时源（独立实例，仅在工具 Tab 前台运行）
+  private liveMeter: DecibelMeter = new DecibelMeter();
+  private liveAngle: AngleSensor = new AngleSensor();
+  private liveCompass: CompassSensor = new CompassSensor();
+  private liveTimer: number = -1;
+  private livePreviewing: boolean = false;
+  private micRequested: boolean = false;   // 本会话是否已请求过麦克风
+  private micDenied: boolean = false;
+  private latestDb: number = 0;
+  private latestTilt: number = -1;
+  private latestHeading: number = -1;
+  private pageShown: boolean = false;
 
   th(): AppTheme {
     return getTheme(this.themeDark);
@@ -33,9 +55,27 @@ struct Index {
     this.showPrivacy = !this.store.privacyAgreed;
     this.showWelcome = this.store.privacyAgreed && !this.store.onboarded;
     this.loaded = true;
+    // 传感器回调只更新缓存值，UI 由 liveTimer 统一节流刷新（遵循刷新坑）
+    this.liveMeter.setWeighting(this.store.weighting);
+    this.liveMeter.setResponse(this.store.response);
+    this.liveMeter.setCalibration(this.store.calibration);
+    this.liveMeter.onDb = (db: number) => {
+      this.latestDb = db;
+    };
+    this.liveAngle.onAngle = (pitch: number, roll: number) => {
+      this.latestTilt = Math.sqrt(pitch * pitch + roll * roll);
+    };
+    this.liveCompass.onHeading = (h: number) => {
+      this.latestHeading = h;
+    };
+  }
+
+  aboutToDisappear(): void {
+    this.stopLive();
   }
 
   onPageShow(): void {
+    this.pageShown = true;
     // 从分贝仪返回后刷新历史
     this.records = this.recordStore.records.slice(0);
     // 分贝仪"查看历史"按钮通过 AppStorage 请求切到历史 Tab
@@ -44,6 +84,82 @@ struct Index {
       this.curTab = req;
       AppStorage.delete('requestTab');
     }
+    this.syncLive();
+  }
+
+  onPageHide(): void {
+    // 进入详情页 / 切到后台时释放麦克风与传感器，避免与正式测量抢占
+    this.pageShown = false;
+    this.stopLive();
+  }
+
+  // 是否应当运行首页实时预览
+  shouldLive(): boolean {
+    return this.pageShown && this.curTab === 0 && this.store.privacyAgreed
+      && !this.showWelcome && !this.showPrivacy;
+  }
+
+  // 根据当前状态启停实时预览
+  async syncLive(): Promise<void> {
+    if (this.shouldLive()) {
+      await this.startLive();
+    } else {
+      this.stopLive();
+    }
+  }
+
+  async startLive(): Promise<void> {
+    if (this.livePreviewing) {
+      return;
+    }
+    // 角度 / 指南针无需运行时权限，直接启动
+    this.liveAngle.start();
+    this.liveCompass.start();
+    // 麦克风：真机需权限，本会话请求一次；拒绝后不再重试，卡片显 --
+    if (!MOCK_HARDWARE && !this.micRequested) {
+      this.micRequested = true;
+      const ctx = getContext(this) as common.UIAbilityContext;
+      const atManager = abilityAccessCtrl.createAtManager();
+      try {
+        const perms: Permissions[] = ['ohos.permission.MICROPHONE'];
+        const res = await atManager.requestPermissionsFromUser(ctx, perms);
+        this.micDenied = !(res.authResults.length > 0 && res.authResults[0] === 0);
+      } catch (e) {
+        this.micDenied = true;
+      }
+    }
+    let micOk: boolean = false;
+    if (!this.micDenied) {
+      micOk = await this.liveMeter.start();
+    }
+    this.liveActive = micOk;
+    this.livePreviewing = true;
+    if (this.liveTimer === -1) {
+      this.liveTimer = setInterval(() => {
+        this.homeDb = Math.round(this.latestDb);
+        this.homeSpectrum = this.liveMeter.getSpectrum();
+        this.homeTilt = this.latestTilt;
+        this.homeHeading = this.latestHeading;
+      }, 200);
+    }
+  }
+
+  stopLive(): void {
+    if (this.liveTimer !== -1) {
+      clearInterval(this.liveTimer);
+      this.liveTimer = -1;
+    }
+    if (this.livePreviewing) {
+      this.liveMeter.stop();
+      this.liveAngle.stop();
+      this.liveCompass.stop();
+      this.livePreviewing = false;
+    }
+    // 清空缓存，避免下次进入时短暂显示上次的陈旧读数
+    this.latestTilt = -1;
+    this.latestHeading = -1;
+    this.latestDb = 0;
+    this.liveActive = false;
   }
 
   onHistoryCleared(): void {
@@ -54,11 +170,13 @@ struct Index {
     await this.store.setPrivacyAgreed();
     this.showPrivacy = false;
     this.showWelcome = !this.store.onboarded;
+    this.syncLive();
   }
 
   async finishWelcome(): Promise<void> {
     await this.store.setOnboarded();
     this.showWelcome = false;
+    this.syncLive();
   }
 
   exitApp(): void {
@@ -71,7 +189,13 @@ struct Index {
       Column() {
         Tabs({ barPosition: BarPosition.End, index: this.curTab }) {
           TabContent() {
-            HomeView({ recentDb: this.recordStore.recentAvg() })
+            HomeView({
+              liveActive: this.liveActive,
+              homeDb: this.homeDb,
+              homeSpectrum: this.homeSpectrum,
+              homeTilt: this.homeTilt,
+              homeHeading: this.homeHeading
+            })
           }
           .tabBar(this.BottomTab('工具', 'grid', 0))
 
@@ -90,7 +214,10 @@ struct Index {
         }
         .barBackgroundColor(this.th().navBar)
         .scrollable(false)
-        .onChange((i: number) => this.curTab = i)
+        .onChange((i: number) => {
+          this.curTab = i;
+          this.syncLive();
+        })
         .layoutWeight(1)
       }
       .width('100%')

@@ -2,6 +2,7 @@ import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO, LEVEL_NOISY_THRESHOLD } from '../model/Theme';
 import { DecibelMeter } from '../model/DecibelMeter';
+import { MOCK_HARDWARE } from '../model/MockConfig';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
 import { alertFeedback, tapFeedback } from '../model/Haptics';
@@ -18,7 +19,8 @@ struct DecibelPage {
   @State peak: number = 0;
   @State avg: number = 0;
   @State minDb: number = 0;
-  @State measuring: boolean = false;
+  @State measuring: boolean = false;   // 记录测量中（累计 MIN/AVG/MAX 并保存）
+  @State previewing: boolean = false;  // 实时预览中（麦克风已开，仅显示当前值）
   @State denied: boolean = false;
   @State elapsed: number = 0;          // 秒
   @State spectrum: number[] = [];
@@ -71,6 +73,10 @@ struct DecibelPage {
     this.meter.setResponse(this.response);
     this.meter.onDb = (db: number) => {
       this.latest = db;
+      // 仅记录测量态累计统计与超标提醒；纯预览态只更新实时值
+      if (!this.measuring) {
+        return;
+      }
       this.sum += db;
       this.count++;
       if (db > this.peak) {
@@ -87,31 +93,62 @@ struct DecibelPage {
         }
       }
     };
+    this.startPreview();
   }
 
   aboutToDisappear(): void {
-    this.stop(false);
+    this.teardown();
   }
 
-  async requestAndStart(): Promise<void> {
-    const ctx = getContext(this) as common.UIAbilityContext;
-    const atManager = abilityAccessCtrl.createAtManager();
-    try {
-      const perms: Permissions[] = ['ohos.permission.MICROPHONE'];
-      const res = await atManager.requestPermissionsFromUser(ctx, perms);
-      const granted: boolean = res.authResults.length > 0 && res.authResults[0] === 0;
-      if (!granted) {
+  // 进入页面即开启实时预览（不累计统计、不保存）
+  async startPreview(): Promise<void> {
+    if (this.previewing || this.measuring) {
+      return;
+    }
+    if (!MOCK_HARDWARE) {
+      const ctx = getContext(this) as common.UIAbilityContext;
+      const atManager = abilityAccessCtrl.createAtManager();
+      try {
+        const perms: Permissions[] = ['ohos.permission.MICROPHONE'];
+        const res = await atManager.requestPermissionsFromUser(ctx, perms);
+        const granted: boolean = res.authResults.length > 0 && res.authResults[0] === 0;
+        if (!granted) {
+          this.denied = true;
+          return;
+        }
+      } catch (e) {
         this.denied = true;
         return;
       }
-      this.denied = false;
-      await this.start();
-    } catch (e) {
-      this.denied = true;
     }
+    this.denied = false;
+    const ok: boolean = await this.meter.start();
+    if (!ok) {
+      this.denied = true;
+      return;
+    }
+    this.previewing = true;
+    this.ensureUiTimer();
   }
 
-  async start(): Promise<void> {
+  // 常驻 UI 定时器：预览或测量时都刷新当前值 / 指针 / 频谱
+  ensureUiTimer(): void {
+    if (this.uiTimer !== -1) {
+      return;
+    }
+    this.uiTimer = setInterval(() => {
+      this.current = Math.round(this.latest);
+      this.needle = this.needleAngle();
+      this.spectrum = this.meter.getSpectrum();
+      if (this.measuring) {
+        this.avg = this.count > 0 ? Math.round(this.sum / this.count) : 0;
+        this.elapsed = Math.floor((Date.now() - this.startTs) / 1000);
+      }
+    }, 150);
+  }
+
+  // 开始记录测量：重置统计并翻到测量态（meter 已在预览中运行，无需重启）
+  startMeasure(): void {
     this.sum = 0;
     this.count = 0;
     this.peak = 0;
@@ -119,46 +156,44 @@ struct DecibelPage {
     this.elapsed = 0;
     this.lastAlertTs = 0;
     this.startTs = Date.now();
-    const ok: boolean = await this.meter.start();
-    if (!ok) {
-      this.denied = true;
-      return;
-    }
     this.measuring = true;
-    this.uiTimer = setInterval(() => {
-      this.current = Math.round(this.latest);
-      this.needle = this.needleAngle();
-      this.avg = this.count > 0 ? Math.round(this.sum / this.count) : 0;
-      this.elapsed = Math.floor((Date.now() - this.startTs) / 1000);
-      this.spectrum = this.meter.getSpectrum();
-    }, 150);
   }
 
-  async stop(save: boolean): Promise<void> {
+  // 停止记录测量（可选保存）；meter 继续预览
+  async stopMeasure(save: boolean): Promise<void> {
+    if (!this.measuring) {
+      return;
+    }
+    this.measuring = false;
+    if (this.peak > this.store.historyMaxDb) {
+      await this.store.setHistoryMaxDb(Math.round(this.peak));
+    }
+    if (save && this.count > 0 && this.elapsed >= 1) {
+      await this.recordStore.add('测量记录', this.elapsed,
+        Math.round(this.minDb), this.avg, Math.round(this.peak));
+    }
+  }
+
+  // 释放全部资源（离开页面）
+  async teardown(): Promise<void> {
+    this.measuring = false;
+    this.previewing = false;
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
-    if (this.measuring) {
-      await this.meter.stop();
-      if (this.peak > this.store.historyMaxDb) {
-        await this.store.setHistoryMaxDb(Math.round(this.peak));
-      }
-      if (save && this.count > 0 && this.elapsed >= 1) {
-        await this.recordStore.add('测量记录', this.elapsed,
-          Math.round(this.minDb), this.avg, Math.round(this.peak));
-      }
-    }
-    this.measuring = false;
-    this.needle = -80;   // 指针归位到起点（30dB）
+    await this.meter.stop();
   }
 
   toggle(): void {
     tapFeedback();
     if (this.measuring) {
-      this.stop(true);
+      this.stopMeasure(true);
+    } else if (this.previewing) {
+      this.startMeasure();
     } else {
-      this.requestAndStart();
+      // 预览未起（如权限被拒后重试）
+      this.startPreview();
     }
   }
 
@@ -174,15 +209,20 @@ struct DecibelPage {
     this.store.setResponse(r);
   }
 
+  // 是否有实时读数（预览或测量中）
+  hasReading(): boolean {
+    return this.previewing || this.measuring;
+  }
+
   // dB -> 指针角度（30dB≈-80°，120dB≈+70°）
   needleAngle(): number {
-    const db: number = this.measuring ? this.current : 30;
+    const db: number = this.hasReading() ? this.current : 30;
     const c: number = Math.max(30, Math.min(120, db));
     return -80 + (c - 30) / 90 * 150;
   }
 
   dispDb(): string {
-    return this.measuring ? this.current.toString() : '--';
+    return this.hasReading() ? this.current.toString() : '--';
   }
 
   fmtElapsed(): string {
@@ -199,7 +239,7 @@ struct DecibelPage {
         Column() {
           this.Toggles()
           this.Gauge()
-          if (this.measuring) {
+          if (this.hasReading()) {
             Row() {
               Circle().width(6).height(6).fill(levelColor(this.current))
                 .shadow({ radius: 6, color: withAlpha(levelColor(this.current), 'CC') })
@@ -339,7 +379,7 @@ struct DecibelPage {
       Canvas(this.arcCtx)
         .width(260).height(260)
         .backgroundColor('#00000000')
-        .opacity(this.measuring ? 1.0 : 0.45)
+        .opacity(this.hasReading() ? 1.0 : 0.45)
         .onReady(() => this.drawGaugeArc())
       // 中心遮罩（凹陷核心 + 下沿暗影）：inset26 → 208
       Circle().width(208).height(208)
@@ -357,8 +397,8 @@ struct DecibelPage {
         Polygon()
           .points([[0, 0], [14, 0], [7, 15]])
           .width(14).height(15)
-          .fill(this.measuring ? levelColor(this.current) : '#22C55E')
-          .shadow({ radius: 7, color: withAlpha(this.measuring ? levelColor(this.current) : '#22C55E', 'B3') })
+          .fill(this.hasReading() ? levelColor(this.current) : '#22C55E')
+          .shadow({ radius: 7, color: withAlpha(this.hasReading() ? levelColor(this.current) : '#22C55E', 'B3') })
           .margin({ top: 22 })
       }
       .width(260).height(260)
@@ -371,7 +411,7 @@ struct DecibelPage {
           .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
           .letterSpacing(2.2)
-        Text(this.measuring ? this.current.toString() : '--')
+        Text(this.hasReading() ? this.current.toString() : '--')
           .fontSize(60)
           .fontFamily(MONO_B)
           .fontColor(this.th().textPrimary)

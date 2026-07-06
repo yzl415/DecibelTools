@@ -6,12 +6,18 @@ import { sensor } from '@kit.SensorServiceKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { MOCK_HARDWARE } from './MockConfig';
 
+/** 传感器精度等级（对齐 sensor.SensorAccuracy 枚举值）：0 不可靠 / 1 低 / 2 中 / 3 高 */
+export const ACC_UNRELIABLE: number = 0;
+export const ACC_LOW: number = 1;
+export const ACC_MEDIUM: number = 2;
+export const ACC_HIGH: number = 3;
+
 export class CompassSensor {
   private subscribed: boolean = false;
   private mockTimer: number = -1;
   private mockHeading: number = 0;
-  // 回调：heading 方位角（度，0=正北，顺时针增大）
-  onHeading: (heading: number) => void = () => {};
+  // 回调：heading 方位角（度，0=正北，顺时针增大）；accuracy 为 SensorAccuracy 枚举值(0~3)
+  onHeading: (heading: number, accuracy: number) => void = () => {};
 
   /** 开始订阅。返回是否成功 */
   start(): boolean {
@@ -21,9 +27,9 @@ export class CompassSensor {
     if (MOCK_HARDWARE) {
       this.mockHeading = 0;
       this.mockTimer = setInterval(() => {
-        // 缓慢顺时针旋转（约 18s 一圈），便于观察方位变化
+        // 缓慢顺时针旋转（约 18s 一圈），便于观察方位变化；模拟器恒定高精度
         this.mockHeading = (this.mockHeading + 2) % 360;
-        this.onHeading(this.mockHeading);
+        this.onHeading(this.mockHeading, ACC_HIGH);
       }, 100);
       this.subscribed = true;
       return true;
@@ -33,7 +39,9 @@ export class CompassSensor {
         let h: number = data.alpha;
         // 归一化到 0~360
         h = ((h % 360) + 360) % 360;
-        this.onHeading(h);
+        // accuracy 为 Response 继承字段（SensorAccuracy 枚举），部分机型可能缺省
+        const acc: number = data.accuracy === undefined ? ACC_MEDIUM : data.accuracy as number;
+        this.onHeading(h, acc);
       }, { interval: 100000000 }); // 100ms（纳秒）
       this.subscribed = true;
       return true;

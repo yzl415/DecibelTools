@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_INDIGO , MONO, MONO_B } from '../model/Theme';
 import { tapFeedback } from '../model/Haptics';
+import { AppIcon } from '../components/AppIcon';
 
 @Entry
 @Component
@@ -44,17 +45,35 @@ struct TimerPage {
     }
   }
 
-  secondaryAction(): void {
-    tapFeedback();
-    if (this.running) {
-      // 计次
-      this.laps = [this.elapsedMs].concat(this.laps);
-    } else {
-      // 复位
-      this.accumMs = 0;
-      this.elapsedMs = 0;
-      this.laps = [];
+  // 左键：计次（仅运行中可用）
+  lap(): void {
+    if (!this.running) {
+      return;
     }
+    tapFeedback();
+    this.laps = [this.elapsedMs].concat(this.laps);
+  }
+
+  // 右键：复位（运行中点则停止并清零）
+  reset(): void {
+    tapFeedback();
+    if (this.timer !== -1) {
+      clearInterval(this.timer);
+      this.timer = -1;
+    }
+    this.running = false;
+    this.accumMs = 0;
+    this.elapsedMs = 0;
+    this.laps = [];
+  }
+
+  showInfo(): void {
+    AlertDialog.show({
+      title: '关于计时器',
+      message: '中间按钮开始 / 停止计时。计时中点左侧"计次"记录当前分段，'
+        + '点右侧"复位"停止并清零全部数据。',
+      confirm: { value: '知道了', action: () => {} }
+    });
   }
 
   // 主显示 mm:ss
@@ -105,12 +124,16 @@ struct TimerPage {
         }
         .margin({ top: 14 })
 
-        // 控制按钮
+        // 控制按钮：计次 / 开始停止 / 复位（三槽稳定占位）
         Row() {
-          this.RoundBtn(this.running ? '计次' : '复位', 60, this.th().surface, this.th().textSecondary,
-            () => this.secondaryAction())
+          this.RoundBtn('计次', 60,
+            this.running ? this.th().surface : this.th().surfaceAlt,
+            this.running ? this.th().textSecondary : this.th().textTertiary,
+            this.running ? 1 : 0.45,
+            () => this.lap())
           this.MainBtn()
-          Column().width(60).height(60) // 占位平衡
+          this.RoundBtn('复位', 60, this.th().surface, this.th().textSecondary, 1,
+            () => this.reset())
         }
         .justifyContent(FlexAlign.SpaceEvenly)
         .width('100%')
@@ -159,7 +182,7 @@ struct TimerPage {
   // PH_TIMER
 
   @Builder
-  RoundBtn(label: string, size: number, bg: string, fg: string, cb: () => void) {
+  RoundBtn(label: string, size: number, bg: string, fg: string, op: number, cb: () => void) {
     Text(label)
       .fontSize(12)
       .fontWeight(FontWeight.Medium)
@@ -169,6 +192,7 @@ struct TimerPage {
       .borderRadius(size / 2)
       .backgroundColor(bg)
       .border({ width: 1, color: this.th().cardBorder })
+      .opacity(op)
       .onClick(cb)
   }
 
@@ -205,7 +229,12 @@ struct TimerPage {
         .fontColor(this.th().textPrimary)
         .layoutWeight(1)
         .textAlign(TextAlign.Center)
-      Column().width(36).height(36)
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        AppIcon({ name: 'info', color: this.th().textSecondary, iconSize: 16 })
+      }
+      .onClick(() => this.showInfo())
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 8 })

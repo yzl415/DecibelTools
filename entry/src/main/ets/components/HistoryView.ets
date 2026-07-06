@@ -1,6 +1,23 @@
-import { getTheme, AppTheme, levelColor , MONO, MONO_B } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
 import { tapFeedback } from '../model/Haptics';
+
+/** 趋势图的一个 x 轴桶（一天 / 一条记录） */
+class TrendPoint {
+  label: string = '';
+  value: number = 0;   // 该桶均值 dB
+  has: boolean = false;
+  constructor(label: string, value: number, has: boolean) {
+    this.label = label;
+    this.value = value;
+    this.has = has;
+  }
+}
+
+const WEEKDAY_CN: string[] = ['日', '一', '二', '三', '四', '五', '六'];
+// 趋势图 dB 值域（纵轴 30~90，与 90/60/30 标记一致）
+const TREND_MIN: number = 30;
+const TREND_MAX: number = 90;
 
 /** 历史 · 趋势与记录 */
 @Component
@@ -9,6 +26,9 @@ export struct HistoryView {
   @Prop records: MeasureRecord[];
   @State range: number = 1; // 0=今天 1=7天 2=30天
   private store: RecordStore = RecordStore.getInstance();
+  // 趋势折线图 Canvas
+  private chartSettings: RenderingContextSettings = new RenderingContextSettings(true);
+  private chartCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.chartSettings);
 
   th(): AppTheme {
     return getTheme(this.themeDark);
@@ -43,6 +63,220 @@ export struct HistoryView {
     return p;
   }
 
+  // 峰值发生的记录（区间内 peak 最大者）
+  peakRecord(): MeasureRecord | null {
+    let best: MeasureRecord | null = null;
+    for (const r of this.filtered()) {
+      if (best === null || r.peak > best.peak) {
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  // 峰值时间标签（如「周三 下午」）
+  peakTimeLabel(): string {
+    const r: MeasureRecord | null = this.peakRecord();
+    if (r === null) {
+      return '';
+    }
+    const d: Date = new Date(r.time);
+    const part: string = d.getHours() < 12 ? '上午' : '下午';
+    return `周${WEEKDAY_CN[d.getDay()]} ${part}`;
+  }
+
+  // 区间副标题
+  rangeSubtitle(): string {
+    if (this.range === 0) {
+      return '今天环境噪音趋势';
+    }
+    if (this.range === 2) {
+      return '最近 30 天环境噪音趋势';
+    }
+    return '最近 7 天环境噪音趋势';
+  }
+
+  // 今日按日历日筛选（区别于 filtered() 的滚动 24h），最旧在前
+  todayRecords(): MeasureRecord[] {
+    const now: Date = new Date();
+    const mid: number = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const list: MeasureRecord[] = this.records.filter((r: MeasureRecord) => r.time >= mid);
+    return list.sort((a: MeasureRecord, b: MeasureRecord) => a.time - b.time);
+  }
+
+  // 按天聚合最近 days 天（今天在最右），返回每天均值桶
+  dayBuckets(days: number): TrendPoint[] {
+    const now: Date = new Date();
+    const todayMid: number = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayMs: number = 24 * 3600 * 1000;
+    const out: TrendPoint[] = [];
+    for (let d = days - 1; d >= 0; d--) {
+      const start: number = todayMid - d * dayMs;
+      const end: number = start + dayMs;
+      const recs: MeasureRecord[] = this.records.filter((r: MeasureRecord) => r.time >= start && r.time < end);
+      const has: boolean = recs.length > 0;
+      let avg: number = 0;
+      if (has) {
+        let s: number = 0;
+        for (const r of recs) {
+          s += r.avg;
+        }
+        avg = Math.round(s / recs.length);
+      }
+      const idx: number = days - 1 - d;
+      let label: string = '';
+      if (days === 7) {
+        label = WEEKDAY_CN[new Date(start).getDay()];
+      } else if (days === 30 && (idx % 6 === 0 || idx === days - 1)) {
+        const dt: Date = new Date(start);
+        label = `${dt.getMonth() + 1}/${dt.getDate()}`;
+      }
+      out.push(new TrendPoint(label, avg, has));
+    }
+    return out;
+  }
+
+  // 当前区间的趋势序列
+  trendSeries(): TrendPoint[] {
+    if (this.range === 1) {
+      return this.dayBuckets(7);
+    }
+    if (this.range === 2) {
+      return this.dayBuckets(30);
+    }
+    // 今天：每条记录一个点，最旧在前
+    const list: MeasureRecord[] = this.todayRecords();
+    const out: TrendPoint[] = [];
+    const n: number = list.length;
+    for (let i = 0; i < n; i++) {
+      const r: MeasureRecord = list[i];
+      const d: Date = new Date(r.time);
+      // 只在首/中/尾显示时间标签，避免拥挤
+      let label: string = '';
+      if (i === 0 || i === n - 1 || i === Math.floor(n / 2)) {
+        label = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      }
+      out.push(new TrendPoint(label, r.avg, true));
+    }
+    return out;
+  }
+
+  // dB -> Canvas y 坐标（30 底、90 顶，含上下内边距）
+  mapY(db: number, h: number): number {
+    const pad: number = 4;
+    const c: number = Math.max(TREND_MIN, Math.min(TREND_MAX, db));
+    const r: number = (c - TREND_MIN) / (TREND_MAX - TREND_MIN);
+    return pad + (1 - r) * (h - pad * 2);
+  }
+
+  // 绘制趋势折线 / 面积图（分区背景 + 虚线网格 + 面积 + 折线 + 峰值点）
+  drawChart(): void {
+    const ctx: CanvasRenderingContext2D = this.chartCtx;
+    const w: number = ctx.width;
+    const h: number = ctx.height;
+    ctx.clearRect(0, 0, w, h);
+    const series: TrendPoint[] = this.trendSeries();
+    const n: number = series.length;
+
+    // 分区背景（较吵 >70 红 / 一般 55~70 黄 / 安静 <55 绿），低透明
+    const y70: number = this.mapY(70, h);
+    const y55: number = this.mapY(55, h);
+    ctx.fillStyle = withAlpha('#EF4444', '10');
+    ctx.fillRect(0, 0, w, y70);
+    ctx.fillStyle = withAlpha('#EAB308', '10');
+    ctx.fillRect(0, y70, w, y55 - y70);
+    ctx.fillStyle = withAlpha('#22C55E', '10');
+    ctx.fillRect(0, y55, w, h - y55);
+
+    // 虚线网格（分区边界）
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = this.th().divider;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y70);
+    ctx.lineTo(w, y70);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, y55);
+    ctx.lineTo(w, y55);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 有数据点的坐标（按桶均匀分布 x）
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (series[i].has) {
+        const x: number = n <= 1 ? w / 2 : (i / (n - 1)) * w;
+        xs.push(x);
+        ys.push(this.mapY(series[i].value, h));
+      }
+    }
+    const m: number = xs.length;
+    if (m === 0) {
+      return;
+    }
+
+    const line: string = this.th().accentStrong;
+    if (m === 1) {
+      // 单点：只画一个圆点
+      ctx.beginPath();
+      ctx.fillStyle = line;
+      ctx.arc(xs[0], ys[0], 4, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    // 面积填充（折线下方到底边）
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, withAlpha(this.th().accent, '47')); // ≈0.28
+    grad.addColorStop(1, withAlpha(this.th().accent, '00'));
+    ctx.beginPath();
+    ctx.moveTo(xs[0], ys[0]);
+    for (let i = 1; i < m; i++) {
+      ctx.lineTo(xs[i], ys[i]);
+    }
+    ctx.lineTo(xs[m - 1], h);
+    ctx.lineTo(xs[0], h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // 折线
+    ctx.beginPath();
+    ctx.moveTo(xs[0], ys[0]);
+    for (let i = 1; i < m; i++) {
+      ctx.lineTo(xs[i], ys[i]);
+    }
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // 峰值点（值最大处）
+    let pk: number = 0;
+    for (let i = 1; i < m; i++) {
+      if (ys[i] < ys[pk]) {
+        pk = i;
+      }
+    }
+    ctx.beginPath();
+    ctx.fillStyle = line;
+    ctx.arc(xs[pk], ys[pk], 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.strokeStyle = this.th().surface;
+    ctx.lineWidth = 2.5;
+    ctx.arc(xs[pk], ys[pk], 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // 图表签名：主题 / 区间 / 数据变化时改变，用作 Canvas 的 ForEach key 强制重建以重绘
+  chartSignature(): string {
+    return `${this.themeDark ? 'd' : 'l'}_${this.range}_${this.filtered().length}_${this.avgDb()}_${this.peakDb()}`;
+  }
+
   fmtTime(ms: number): string {
     const d: Date = new Date(ms);
     const now: Date = new Date();
@@ -69,7 +303,7 @@ export struct HistoryView {
           .fontColor(this.th().textPrimary)
           .width('100%')
           .margin({ bottom: 4 })
-        Text('环境噪音记录与趋势')
+        Text(this.rangeSubtitle())
           .fontSize(12)
           .fontColor(this.th().textSecondary)
           .width('100%')
@@ -159,7 +393,7 @@ export struct HistoryView {
             .fontSize(12)
             .fontFamily(MONO_B)
             .fontColor(this.th().danger)
-          Text(this.filtered().length + ' 条记录')
+          Text(this.peakTimeLabel().length > 0 ? this.peakTimeLabel() : (this.filtered().length + ' 条记录'))
             .fontSize(10)
             .fontColor(this.th().textTertiary)
             .margin({ top: 2 })
@@ -169,31 +403,54 @@ export struct HistoryView {
       .width('100%')
       .margin({ bottom: 14 })
 
-      // 柱状趋势（最近 7 条均值）
-      Row() {
-        if (this.filtered().length === 0) {
-          Text('暂无趋势数据')
-            .fontSize(12)
-            .fontColor(this.th().textTertiary)
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .padding({ top: 30, bottom: 30 })
-        } else {
-          Row({ space: 6 }) {
-            ForEach(this.trendBars(), (db: number) => {
-              Column()
-                .layoutWeight(1)
-                .height(this.barH(db))
-                .borderRadius(3)
-                .backgroundColor(levelColor(db))
-            })
-          }
+      if (this.filtered().length === 0) {
+        Text('暂无趋势数据')
+          .fontSize(12)
+          .fontColor(this.th().textTertiary)
           .width('100%')
-          .height(100)
-          .alignItems(VerticalAlign.Bottom)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 30, bottom: 30 })
+      } else {
+        Row({ space: 8 }) {
+          // y 轴刻度
+          Column() {
+            Text('90').fontSize(9).fontFamily(MONO).fontColor(this.th().textTertiary)
+            Blank().layoutWeight(1)
+            Text('60').fontSize(9).fontFamily(MONO).fontColor(this.th().textTertiary)
+            Blank().layoutWeight(1)
+            Text('30').fontSize(9).fontFamily(MONO).fontColor(this.th().textTertiary)
+          }
+          .height(130)
+          .padding({ top: 2, bottom: 16 })
+
+          Column() {
+            // 用签名做 key 的 ForEach 包裹 Canvas：主题/区间/数据变化时重建组件，重新触发 onReady 重绘
+            ForEach([this.chartSignature()], (sig: string) => {
+              Canvas(this.chartCtx)
+                .width('100%')
+                .height(130)
+                .onReady(() => this.drawChart())
+            }, (sig: string) => sig)
+            // x 轴标签
+            Row() {
+              ForEach(this.trendSeries(), (p: TrendPoint, i: number) => {
+                Text(p.label)
+                  .fontSize(9)
+                  .fontFamily(MONO)
+                  .fontColor(this.th().textTertiary)
+                  .layoutWeight(1)
+                  .textAlign(i === 0 ? TextAlign.Start
+                    : (i === this.trendSeries().length - 1 ? TextAlign.End : TextAlign.Center))
+              }, (p: TrendPoint, i: number) => `${i}_${p.label}`)
+            }
+            .width('100%')
+            .margin({ top: 7 })
+          }
+          .layoutWeight(1)
         }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
       }
-      .width('100%')
     }
     .width('100%')
     .padding(16)
@@ -201,28 +458,6 @@ export struct HistoryView {
     .borderRadius(20)
     .border({ width: 1, color: this.th().cardBorder })
     .margin({ bottom: 14 })
-  }
-
-  // 取最近若干条均值（倒序变正序）做柱
-  trendBars(): number[] {
-    const list: MeasureRecord[] = this.filtered();
-    const n: number = Math.min(7, list.length);
-    const arr: number[] = [];
-    for (let i = n - 1; i >= 0; i--) {
-      arr.push(list[i].avg);
-    }
-    return arr;
-  }
-
-  barH(db: number): number {
-    // 30~100 dB -> 20~100 px
-    let n: number = (db - 30) / 70;
-    if (n < 0.1) {
-      n = 0.1;
-    } else if (n > 1) {
-      n = 1;
-    }
-    return 20 + n * 80;
   }
 
   @Builder

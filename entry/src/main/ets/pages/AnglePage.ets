@@ -48,6 +48,15 @@ struct AnglePage {
     this.calRoll = this.lastRoll;
   }
 
+  showInfo(): void {
+    AlertDialog.show({
+      title: '关于角度仪',
+      message: '用设备重力传感器测量倾角。把手机贴在物体表面读取横向 / 纵向角度；'
+        + '将手机放平后点"校准归零"可把当前姿态设为 0°，用于测量相对角度。读数仅供参考。',
+      confirm: { value: '知道了', action: () => {} }
+    });
+  }
+
   // 合成倾角（两轴矢量和）
   tilt(): number {
     return Math.round(Math.sqrt(this.pitch * this.pitch + this.roll * this.roll) * 10) / 10;
@@ -185,7 +194,12 @@ struct AnglePage {
         .fontColor(this.th().textPrimary)
         .layoutWeight(1)
         .textAlign(TextAlign.Center)
-      Column().width(36).height(36)
+      Stack() {
+        Column().width(36).height(36).borderRadius(11).backgroundColor(this.th().surfaceAlt)
+          .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
+        AppIcon({ name: 'info', color: this.th().textSecondary, iconSize: 16 })
+      }
+      .onClick(() => this.showInfo())
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 8 })

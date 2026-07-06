@@ -248,7 +248,7 @@ export struct SettingsView {
         .onChange((v: boolean) => cb(v))
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 
   @Builder
@@ -278,7 +278,7 @@ export struct SettingsView {
       .border({ width: 1, color: this.th().cardBorder })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 11, bottom: 11 })
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 
   @Builder
@@ -312,6 +312,6 @@ export struct SettingsView {
       .border({ width: 1, color: this.th().cardBorder })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 11, bottom: 11 })
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 }
