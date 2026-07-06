@@ -14,6 +14,9 @@ export const LEVEL_NORMAL: string = '#EAB308';   // 一般
 export const LEVEL_LOUD: string = '#F59E0B';     // 较吵
 export const LEVEL_NOISY: string = '#EF4444';    // 吵闹
 
+/** "吵闹"等级起始阈值（dB），与 levelColor 分档一致；供超标提醒复用 */
+export const LEVEL_NOISY_THRESHOLD: number = 85;
+
 /** 工具主题色（图标 / 局部强调，两套主题共用） */
 export const TOOL_GREEN: string = '#00D68F';
 export const TOOL_INDIGO: string = '#6D78FF';

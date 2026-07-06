@@ -38,6 +38,16 @@ struct Index {
   onPageShow(): void {
     // 从分贝仪返回后刷新历史
     this.records = this.recordStore.records.slice(0);
+    // 分贝仪"查看历史"按钮通过 AppStorage 请求切到历史 Tab
+    const req: number | undefined = AppStorage.get('requestTab');
+    if (req !== undefined) {
+      this.curTab = req;
+      AppStorage.delete('requestTab');
+    }
+  }
+
+  onHistoryCleared(): void {
+    this.records = this.recordStore.records.slice(0);
   }
 
   async agreePrivacy(): Promise<void> {
@@ -71,7 +81,10 @@ struct Index {
           .tabBar(this.BottomTab('历史', 'list', 1))
 
           TabContent() {
-            SettingsView()
+            SettingsView({
+              recordCount: this.records.length,
+              onClearHistory: () => this.onHistoryCleared()
+            })
           }
           .tabBar(this.BottomTab('设置', 'gear', 2))
         }

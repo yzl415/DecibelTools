@@ -1,10 +1,13 @@
 import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
-import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO, LEVEL_NOISY_THRESHOLD } from '../model/Theme';
 import { DecibelMeter } from '../model/DecibelMeter';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
+import { alertFeedback, tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
+
+const OVER_ALERT_COOLDOWN_MS: number = 6000;
 
 @Entry
 @Component
@@ -29,6 +32,7 @@ struct DecibelPage {
   private uiTimer: number = -1;
   private latest: number = 0;
   private startTs: number = 0;
+  private lastAlertTs: number = 0;
   // 表盘彩色弧用 Canvas 绘制（标准 HTML5 角度：0°=3点钟，顺时针为正），
   // 避免 sweepGradient 角度约定不确定 + end 越界(>360) 被忽略的问题。
   private arcSettings: RenderingContextSettings = new RenderingContextSettings(true);
@@ -75,6 +79,13 @@ struct DecibelPage {
       if (this.minDb === 0 || db < this.minDb) {
         this.minDb = db;
       }
+      if (this.store.overLimitAlert && db >= LEVEL_NOISY_THRESHOLD) {
+        const now: number = Date.now();
+        if (now - this.lastAlertTs >= OVER_ALERT_COOLDOWN_MS) {
+          this.lastAlertTs = now;
+          alertFeedback();
+        }
+      }
     };
   }
 
@@ -106,6 +117,7 @@ struct DecibelPage {
     this.peak = 0;
     this.minDb = 0;
     this.elapsed = 0;
+    this.lastAlertTs = 0;
     this.startTs = Date.now();
     const ok: boolean = await this.meter.start();
     if (!ok) {
@@ -142,6 +154,7 @@ struct DecibelPage {
   }
 
   toggle(): void {
+    tapFeedback();
     if (this.measuring) {
       this.stop(true);
     } else {
@@ -510,7 +523,10 @@ struct DecibelPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         AppIcon({ name: 'list', color: this.th().textSecondary, iconSize: 16 })
       }
-      .onClick(() => router.back())
+      .onClick(() => {
+        AppStorage.setOrCreate('requestTab', 1);
+        router.back();
+      })
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 8 })

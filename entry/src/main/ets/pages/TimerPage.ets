@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_INDIGO , MONO, MONO_B } from '../model/Theme';
+import { tapFeedback } from '../model/Haptics';
 
 @Entry
 @Component
@@ -24,6 +25,7 @@ struct TimerPage {
   }
 
   toggle(): void {
+    tapFeedback();
     if (this.running) {
       // 暂停
       this.accumMs += Date.now() - this.startTs;
@@ -43,6 +45,7 @@ struct TimerPage {
   }
 
   secondaryAction(): void {
+    tapFeedback();
     if (this.running) {
       // 计次
       this.laps = [this.elapsedMs].concat(this.laps);

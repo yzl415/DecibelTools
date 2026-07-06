@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO } from '../model/Theme';
 import { TorchController } from '../model/TorchController';
+import { tapFeedback } from '../model/Haptics';
 
 @Entry
 @Component
@@ -28,6 +29,7 @@ struct FlashlightPage {
 
   // 中央圆盘点击：切换开关（当前模式生效）
   toggleDisc(): void {
+    tapFeedback();
     if (this.on) {
       this.allOff();
     } else {

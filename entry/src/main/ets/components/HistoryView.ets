@@ -1,5 +1,6 @@
 import { getTheme, AppTheme, levelColor , MONO, MONO_B } from '../model/Theme';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
+import { tapFeedback } from '../model/Haptics';
 
 /** 历史 · 趋势与记录 */
 @Component
@@ -13,20 +14,28 @@ export struct HistoryView {
     return getTheme(this.themeDark);
   }
 
+  // 按当前选中区间过滤记录（0=今天 1=7天 2=30天）
+  filtered(): MeasureRecord[] {
+    const days: number = this.range === 0 ? 1 : this.range === 1 ? 7 : 30;
+    const cutoff: number = Date.now() - days * 24 * 3600 * 1000;
+    return this.records.filter((r: MeasureRecord) => r.time >= cutoff);
+  }
+
   avgDb(): number {
-    if (this.records.length === 0) {
+    const list: MeasureRecord[] = this.filtered();
+    if (list.length === 0) {
       return 0;
     }
     let s: number = 0;
-    for (const r of this.records) {
+    for (const r of list) {
       s += r.avg;
     }
-    return Math.round(s / this.records.length);
+    return Math.round(s / list.length);
   }
 
   peakDb(): number {
     let p: number = 0;
-    for (const r of this.records) {
+    for (const r of this.filtered()) {
       if (r.peak > p) {
         p = r.peak;
       }
@@ -82,11 +91,11 @@ export struct HistoryView {
         this.TrendCard()
 
         this.SectionLabel('最近记录')
-        if (this.records.length === 0) {
+        if (this.filtered().length === 0) {
           this.EmptyState()
         } else {
           Column({ space: 9 }) {
-            ForEach(this.records.slice(0, 20), (r: MeasureRecord) => {
+            ForEach(this.filtered().slice(0, 20), (r: MeasureRecord) => {
               this.RecordRow(r)
             }, (r: MeasureRecord) => r.id.toString())
           }
@@ -150,7 +159,7 @@ export struct HistoryView {
             .fontSize(12)
             .fontFamily(MONO_B)
             .fontColor(this.th().danger)
-          Text(this.records.length + ' 条记录')
+          Text(this.filtered().length + ' 条记录')
             .fontSize(10)
             .fontColor(this.th().textTertiary)
             .margin({ top: 2 })
@@ -162,7 +171,7 @@ export struct HistoryView {
 
       // 柱状趋势（最近 7 条均值）
       Row() {
-        if (this.records.length === 0) {
+        if (this.filtered().length === 0) {
           Text('暂无趋势数据')
             .fontSize(12)
             .fontColor(this.th().textTertiary)
@@ -196,10 +205,11 @@ export struct HistoryView {
 
   // 取最近若干条均值（倒序变正序）做柱
   trendBars(): number[] {
-    const n: number = Math.min(7, this.records.length);
+    const list: MeasureRecord[] = this.filtered();
+    const n: number = Math.min(7, list.length);
     const arr: number[] = [];
     for (let i = n - 1; i >= 0; i--) {
-      arr.push(this.records[i].avg);
+      arr.push(list[i].avg);
     }
     return arr;
   }
@@ -257,6 +267,7 @@ export struct HistoryView {
     .border({ width: 1, color: this.th().cardBorder })
     .gesture(
       LongPressGesture().onAction(() => {
+        tapFeedback();
         this.store.remove(r.id);
         this.records = this.store.records.slice(0);
       })

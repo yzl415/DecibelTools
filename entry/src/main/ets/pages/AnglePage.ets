@@ -2,6 +2,7 @@ import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { AngleSensor } from '../model/AngleSensor';
 import { AppIcon } from '../components/AppIcon';
+import { tapFeedback } from '../model/Haptics';
 
 @Entry
 @Component
@@ -42,6 +43,7 @@ struct AnglePage {
   }
 
   calibrate(): void {
+    tapFeedback();
     this.calPitch = this.lastPitch;
     this.calRoll = this.lastRoll;
   }

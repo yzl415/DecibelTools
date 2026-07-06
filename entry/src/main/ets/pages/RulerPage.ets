@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
+import { tapFeedback } from '../model/Haptics';
 
 @Entry
 @Component
@@ -69,6 +70,7 @@ struct RulerPage {
 
   // 校准：用户用实物（如硬币 / 银行卡 8.56cm）对齐两线，输入实际厘米后反算 px/cm
   applyCalib(realCm: number): void {
+    tapFeedback();
     const vp: number = Math.abs(this.botY - this.topY);
     if (realCm > 0 && vp > 10) {
       const ppc: number = vp / realCm;

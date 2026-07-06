@@ -1,13 +1,18 @@
 import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, TOOL_ORANGE, TOOL_PURPLE , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
+import { RecordStore } from '../model/RecordStore';
+import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from './AppIcon';
 
 /** 设置 */
 @Component
 export struct SettingsView {
   @StorageProp('themeDark') themeDark: boolean = false;
+  @Prop recordCount: number;
+  onClearHistory: () => void = () => {};
   private store: SettingsStore = SettingsStore.getInstance();
+  private recordStore: RecordStore = RecordStore.getInstance();
   // 本地镜像，用于驱动刷新
   @State weighting: string = 'A';
   @State response: string = 'FAST';
@@ -28,8 +33,36 @@ export struct SettingsView {
   }
 
   toggleTheme(dark: boolean): void {
+    tapFeedback();
     AppStorage.setOrCreate('themeDark', dark);
     this.store.setThemeDark(dark);
+  }
+
+  async clearHistory(): Promise<void> {
+    if (this.recordCount === 0) {
+      return;
+    }
+    await this.recordStore.clear();
+    this.onClearHistory();
+  }
+
+  confirmClearHistory(): void {
+    if (this.recordCount === 0) {
+      return;
+    }
+    AlertDialog.show({
+      title: '清空测量历史',
+      message: `将删除全部 ${this.recordCount} 条本地测量记录，此操作不可撤销。`,
+      primaryButton: {
+        value: '取消',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '清空',
+        fontColor: this.th().danger,
+        action: () => this.clearHistory()
+      }
+    });
   }
 
   build() {
@@ -91,7 +124,22 @@ export struct SettingsView {
             this.vibration, (v: boolean) => {
               this.vibration = v;
               this.store.setVibration(v);
+              if (v) {
+                tapFeedback();
+              }
             })
+        }
+        .width('100%')
+        .backgroundColor(this.th().surface)
+        .borderRadius(16)
+        .border({ width: 1, color: this.th().cardBorder })
+        .clip(true)
+        .margin({ bottom: 18 })
+
+        this.SectionLabel('数据')
+        Column() {
+          this.NavRow(this.th().surfaceAlt, this.th().textSecondary, 'list', '清空测量历史',
+            this.recordCount + ' 条', () => this.confirmClearHistory())
         }
         .width('100%')
         .backgroundColor(this.th().surface)
