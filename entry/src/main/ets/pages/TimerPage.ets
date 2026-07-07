@@ -1,7 +1,8 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_INDIGO , MONO, MONO_B } from '../model/Theme';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
+import { backPage, showInfoDialog } from '../model/NavigationHelper';
+import { TimerState } from '../model/TimerState';
 
 @Entry
 @Component
@@ -10,9 +11,8 @@ struct TimerPage {
   @State elapsedMs: number = 0;
   @State running: boolean = false;
   @State laps: number[] = [];
-  private startTs: number = 0;
-  private accumMs: number = 0;
   private timer: number = -1;
+  private timerState: TimerState = new TimerState();
 
   th(): AppTheme {
     return getTheme(this.themeDark);
@@ -29,18 +29,18 @@ struct TimerPage {
     tapFeedback();
     if (this.running) {
       // 暂停
-      this.accumMs += Date.now() - this.startTs;
-      this.elapsedMs = this.accumMs;
+      const stopped = this.timerState.stop(Date.now());
+      this.elapsedMs = stopped.elapsedMs;
       if (this.timer !== -1) {
         clearInterval(this.timer);
         this.timer = -1;
       }
       this.running = false;
     } else {
-      this.startTs = Date.now();
+      this.timerState.start(Date.now());
       this.running = true;
       this.timer = setInterval(() => {
-        this.elapsedMs = this.accumMs + (Date.now() - this.startTs);
+        this.elapsedMs = this.timerState.snapshot(Date.now()).elapsedMs;
       }, 31);
     }
   }
@@ -51,7 +51,7 @@ struct TimerPage {
       return;
     }
     tapFeedback();
-    this.laps = [this.elapsedMs].concat(this.laps);
+    this.laps = this.timerState.lap(Date.now()).laps;
   }
 
   // 右键：复位（运行中点则停止并清零）
@@ -62,18 +62,15 @@ struct TimerPage {
       this.timer = -1;
     }
     this.running = false;
-    this.accumMs = 0;
     this.elapsedMs = 0;
     this.laps = [];
+    this.timerState.reset();
   }
 
   showInfo(): void {
-    AlertDialog.show({
-      title: '关于计时器',
-      message: '中间按钮开始 / 停止计时。计时中点左侧"计次"记录当前分段，'
-        + '点右侧"复位"停止并清零全部数据。',
-      confirm: { value: '知道了', action: () => {} }
-    });
+    showInfoDialog(this.getUIContext(), '关于计时器',
+      '中间按钮开始 / 停止计时。计时中点左侧"计次"记录当前分段，'
+        + '点右侧"复位"停止并清零全部数据。');
   }
 
   // 主显示 mm:ss
@@ -222,7 +219,7 @@ struct TimerPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => router.back())
+      .onClick(() => backPage(this.getUIContext()))
       Text('计时器')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

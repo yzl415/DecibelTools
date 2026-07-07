@@ -120,7 +120,11 @@ export class RecordStore {
     if (this.store === null) {
       return;
     }
-    await this.store.put(KEY_RECORDS, JSON.stringify(this.records));
-    await this.store.flush();
+    try {
+      await this.store.put(KEY_RECORDS, JSON.stringify(this.records));
+      await this.store.flush();
+    } catch (e) {
+      this.store = null;
+    }
   }
 }

@@ -1,20 +1,9 @@
 import { getTheme, AppTheme, levelColor, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
 import { tapFeedback } from '../model/Haptics';
+import { averageDb, dayBuckets, filterRecordsByRange, peakDb, peakRecord, peakTimeLabel, todayRecords,
+  trendSeries, TrendPoint } from '../model/HistoryAnalysis';
 
-/** 趋势图的一个 x 轴桶（一天 / 一条记录） */
-class TrendPoint {
-  label: string = '';
-  value: number = 0;   // 该桶均值 dB
-  has: boolean = false;
-  constructor(label: string, value: number, has: boolean) {
-    this.label = label;
-    this.value = value;
-    this.has = has;
-  }
-}
-
-const WEEKDAY_CN: string[] = ['日', '一', '二', '三', '四', '五', '六'];
 // 趋势图 dB 值域（纵轴 30~90，与 90/60/30 标记一致）
 const TREND_MIN: number = 30;
 const TREND_MAX: number = 90;
@@ -36,53 +25,25 @@ export struct HistoryView {
 
   // 按当前选中区间过滤记录（0=今天 1=7天 2=30天）
   filtered(): MeasureRecord[] {
-    const days: number = this.range === 0 ? 1 : this.range === 1 ? 7 : 30;
-    const cutoff: number = Date.now() - days * 24 * 3600 * 1000;
-    return this.records.filter((r: MeasureRecord) => r.time >= cutoff);
+    return filterRecordsByRange(this.records, this.range, Date.now());
   }
 
   avgDb(): number {
-    const list: MeasureRecord[] = this.filtered();
-    if (list.length === 0) {
-      return 0;
-    }
-    let s: number = 0;
-    for (const r of list) {
-      s += r.avg;
-    }
-    return Math.round(s / list.length);
+    return averageDb(this.filtered());
   }
 
   peakDb(): number {
-    let p: number = 0;
-    for (const r of this.filtered()) {
-      if (r.peak > p) {
-        p = r.peak;
-      }
-    }
-    return p;
+    return peakDb(this.filtered());
   }
 
   // 峰值发生的记录（区间内 peak 最大者）
   peakRecord(): MeasureRecord | null {
-    let best: MeasureRecord | null = null;
-    for (const r of this.filtered()) {
-      if (best === null || r.peak > best.peak) {
-        best = r;
-      }
-    }
-    return best;
+    return peakRecord(this.filtered());
   }
 
   // 峰值时间标签（如「周三 下午」）
   peakTimeLabel(): string {
-    const r: MeasureRecord | null = this.peakRecord();
-    if (r === null) {
-      return '';
-    }
-    const d: Date = new Date(r.time);
-    const part: string = d.getHours() < 12 ? '上午' : '下午';
-    return `周${WEEKDAY_CN[d.getDay()]} ${part}`;
+    return peakTimeLabel(this.peakRecord());
   }
 
   // 区间副标题
@@ -98,67 +59,17 @@ export struct HistoryView {
 
   // 今日按日历日筛选（区别于 filtered() 的滚动 24h），最旧在前
   todayRecords(): MeasureRecord[] {
-    const now: Date = new Date();
-    const mid: number = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const list: MeasureRecord[] = this.records.filter((r: MeasureRecord) => r.time >= mid);
-    return list.sort((a: MeasureRecord, b: MeasureRecord) => a.time - b.time);
+    return todayRecords(this.records, Date.now());
   }
 
   // 按天聚合最近 days 天（今天在最右），返回每天均值桶
   dayBuckets(days: number): TrendPoint[] {
-    const now: Date = new Date();
-    const todayMid: number = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const dayMs: number = 24 * 3600 * 1000;
-    const out: TrendPoint[] = [];
-    for (let d = days - 1; d >= 0; d--) {
-      const start: number = todayMid - d * dayMs;
-      const end: number = start + dayMs;
-      const recs: MeasureRecord[] = this.records.filter((r: MeasureRecord) => r.time >= start && r.time < end);
-      const has: boolean = recs.length > 0;
-      let avg: number = 0;
-      if (has) {
-        let s: number = 0;
-        for (const r of recs) {
-          s += r.avg;
-        }
-        avg = Math.round(s / recs.length);
-      }
-      const idx: number = days - 1 - d;
-      let label: string = '';
-      if (days === 7) {
-        label = WEEKDAY_CN[new Date(start).getDay()];
-      } else if (days === 30 && (idx % 6 === 0 || idx === days - 1)) {
-        const dt: Date = new Date(start);
-        label = `${dt.getMonth() + 1}/${dt.getDate()}`;
-      }
-      out.push(new TrendPoint(label, avg, has));
-    }
-    return out;
+    return dayBuckets(this.records, days, Date.now());
   }
 
   // 当前区间的趋势序列
   trendSeries(): TrendPoint[] {
-    if (this.range === 1) {
-      return this.dayBuckets(7);
-    }
-    if (this.range === 2) {
-      return this.dayBuckets(30);
-    }
-    // 今天：每条记录一个点，最旧在前
-    const list: MeasureRecord[] = this.todayRecords();
-    const out: TrendPoint[] = [];
-    const n: number = list.length;
-    for (let i = 0; i < n; i++) {
-      const r: MeasureRecord = list[i];
-      const d: Date = new Date(r.time);
-      // 只在首/中/尾显示时间标签，避免拥挤
-      let label: string = '';
-      if (i === 0 || i === n - 1 || i === Math.floor(n / 2)) {
-        label = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-      }
-      out.push(new TrendPoint(label, r.avg, true));
-    }
-    return out;
+    return trendSeries(this.records, this.range, Date.now());
   }
 
   // dB -> Canvas y 坐标（30 底、90 顶，含上下内边距）

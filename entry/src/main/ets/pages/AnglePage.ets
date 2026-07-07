@@ -1,8 +1,8 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { AngleSensor } from '../model/AngleSensor';
 import { AppIcon } from '../components/AppIcon';
 import { tapFeedback } from '../model/Haptics';
+import { backPage, showInfoDialog } from '../model/NavigationHelper';
 
 @Entry
 @Component
@@ -27,19 +27,42 @@ struct AnglePage {
       this.lastPitch = pitch;
       this.lastRoll = roll;
     };
+  }
+
+  aboutToDisappear(): void {
+    this.stopMeasure();
+  }
+
+  startMeasure(): void {
+    if (this.active) {
+      return;
+    }
     this.active = this.sensor.start();
+    if (!this.active) {
+      return;
+    }
     this.uiTimer = setInterval(() => {
       this.pitch = Math.round((this.lastPitch - this.calPitch) * 10) / 10;
       this.roll = Math.round((this.lastRoll - this.calRoll) * 10) / 10;
     }, 100);
   }
 
-  aboutToDisappear(): void {
+  stopMeasure(): void {
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
     this.sensor.stop();
+    this.active = false;
+  }
+
+  toggleMeasure(): void {
+    tapFeedback();
+    if (this.active) {
+      this.stopMeasure();
+    } else {
+      this.startMeasure();
+    }
   }
 
   calibrate(): void {
@@ -49,12 +72,9 @@ struct AnglePage {
   }
 
   showInfo(): void {
-    AlertDialog.show({
-      title: '关于角度仪',
-      message: '用设备重力传感器测量倾角。把手机贴在物体表面读取横向 / 纵向角度；'
-        + '将手机放平后点"校准归零"可把当前姿态设为 0°，用于测量相对角度。读数仅供参考。',
-      confirm: { value: '知道了', action: () => {} }
-    });
+    showInfoDialog(this.getUIContext(), '关于角度仪',
+      '用设备重力传感器测量倾角。把手机贴在物体表面读取横向 / 纵向角度；'
+        + '将手机放平后点"校准归零"可把当前姿态设为 0°，用于测量相对角度。读数仅供参考。');
   }
 
   // 合成倾角（两轴矢量和）
@@ -125,6 +145,25 @@ struct AnglePage {
         .margin({ top: 20 })
 
         Row() {
+          Column().width(13).height(13)
+            .borderRadius(this.active ? 3 : 6)
+            .backgroundColor(this.active ? this.th().danger : TOOL_GREEN)
+          Text(this.active ? '停止测量' : '开始测量')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.active ? this.th().danger : this.th().textPrimary)
+            .margin({ left: 9 })
+        }
+        .justifyContent(FlexAlign.Center)
+        .width('100%')
+        .padding({ top: 15, bottom: 15 })
+        .backgroundColor(this.th().surface)
+        .borderRadius(16)
+        .border({ width: 1, color: this.th().cardBorder })
+        .margin({ top: 14 })
+        .onClick(() => this.toggleMeasure())
+
+        Row() {
           Column().width(13).height(13).borderRadius(3).backgroundColor(TOOL_INDIGO)
           Text('校准归零')
             .fontSize(15)
@@ -187,7 +226,7 @@ struct AnglePage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => router.back())
+      .onClick(() => backPage(this.getUIContext()))
       Text('角度仪')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

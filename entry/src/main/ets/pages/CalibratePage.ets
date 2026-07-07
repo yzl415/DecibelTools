@@ -1,6 +1,6 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_GREEN , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
+import { backPage } from '../model/NavigationHelper';
 
 /** 麦克风校准：用滑块叠加偏移，使读数对齐已知参考声级计。 */
 @Entry
@@ -114,7 +114,7 @@ struct CalibratePage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => router.back())
+      .onClick(() => backPage(this.getUIContext()))
       Text('麦克风校准')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

@@ -121,7 +121,11 @@ export class SettingsStore {
     if (this.store === null) {
       return;
     }
-    await this.store.put(key, value);
-    await this.store.flush();
+    try {
+      await this.store.put(key, value);
+      await this.store.flush();
+    } catch (e) {
+      this.store = null;
+    }
   }
 }

@@ -1,7 +1,7 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TOOL_PURPLE, TOOL_ORANGE , MONO, MONO_B, withAlpha } from '../model/Theme';
-import { CompassSensor } from '../model/CompassSensor';
 import { AppIcon } from './AppIcon';
+import { pushPage } from '../model/NavigationHelper';
+import { angleSummary, compassSummary, hasLiveDb, homeDbSummary } from '../model/HomePreviewState';
 
 /** 仪表项元数据 */
 class Instrument {
@@ -58,7 +58,7 @@ export struct HomeView {
 
   // 首页大数字是否有实时读数
   hasDb(): boolean {
-    return this.liveActive && this.homeDb > 0;
+    return hasLiveDb(this.liveActive, this.homeDb);
   }
 
   // 等级渐变条上当前值指示点的横向百分比（30~100 dB -> 0~100%）
@@ -142,7 +142,7 @@ export struct HomeView {
   LiveCard() {
     Column() {
       Row() {
-        Text('环境噪音 · 实时')
+        Text('环境噪音 · 待测')
           .fontSize(11)
           .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
@@ -154,7 +154,7 @@ export struct HomeView {
             .shadow(this.liveActive
               ? { radius: 7, color: withAlpha(this.th().accent, 'E6') }
               : { radius: 0, color: '#00000000' })
-          Text('LIVE')
+          Text(this.liveActive ? 'LIVE' : 'IDLE')
             .fontSize(10)
             .fontFamily(MONO)
             .fontColor(this.liveActive ? this.th().accent : this.th().textTertiary)
@@ -236,7 +236,7 @@ export struct HomeView {
     .border({ width: 1, color: this.th().cardBorder })
     .shadow({ radius: this.th().isDark ? 0 : 12, color: '#14000000', offsetY: 5 })
     .margin({ bottom: 22 })
-    .onClick(() => router.pushUrl({ url: 'pages/DecibelPage' }))
+    .onClick(() => pushPage(this.getUIContext(), 'pages/DecibelPage'))
   }
 
   // 迷你频谱数据：有实时数据用 homeSpectrum（取前 8 条），否则静态占位
@@ -255,15 +255,13 @@ export struct HomeView {
   // 工具行右侧摘要值（在 @Builder 内直接读 this.xxx，随实时状态刷新）；测距尺无摘要返回 ''
   summaryValue(key: string): string {
     if (key === 'decibel') {
-      return this.hasDb() ? this.homeDb.toString() + ' dB' : '--';
+      return homeDbSummary(this.liveActive, this.homeDb);
     }
     if (key === 'angle') {
-      return this.homeTilt >= 0 ? this.homeTilt.toFixed(1) + '°' : '--';
+      return angleSummary(this.homeTilt);
     }
     if (key === 'compass') {
-      return this.homeHeading >= 0
-        ? CompassSensor.dirAbbr(this.homeHeading) + ' ' + Math.round(this.homeHeading).toString() + '°'
-        : '--';
+      return compassSummary(this.homeHeading);
     }
     return '';
   }
@@ -306,7 +304,7 @@ export struct HomeView {
     .backgroundColor(this.th().surface)
     .borderRadius(16)
     .border({ width: 1, color: this.th().cardBorder })
-    .onClick(() => router.pushUrl({ url: ins.route }))
+    .onClick(() => pushPage(this.getUIContext(), ins.route))
   }
 
   @Builder
@@ -328,6 +326,6 @@ export struct HomeView {
     .backgroundColor(this.th().surface)
     .borderRadius(16)
     .border({ width: 1, color: this.th().cardBorder })
-    .onClick(() => router.pushUrl({ url: route }))
+    .onClick(() => pushPage(this.getUIContext(), route))
   }
 }

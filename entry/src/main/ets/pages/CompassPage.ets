@@ -1,7 +1,9 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme , MONO, MONO_B } from '../model/Theme';
-import { CompassSensor, ACC_HIGH, ACC_MEDIUM, ACC_LOW } from '../model/CompassSensor';
+import { CompassSensor, ACC_MEDIUM } from '../model/CompassSensor';
 import { AppIcon } from '../components/AppIcon';
+import { backPage, showInfoDialog } from '../model/NavigationHelper';
+import { compassAccuracyText, compassStatusText } from '../model/CompassStatus';
+import { tapFeedback } from '../model/Haptics';
 
 @Entry
 @Component
@@ -24,59 +26,58 @@ struct CompassPage {
       this.lastHeading = h;
       this.lastAccuracy = acc;
     };
+  }
+
+  aboutToDisappear(): void {
+    this.stopMeasure();
+  }
+
+  startMeasure(): void {
+    if (this.active) {
+      return;
+    }
     this.active = this.sensor.start();
+    if (!this.active) {
+      return;
+    }
     this.uiTimer = setInterval(() => {
       this.heading = Math.round(this.lastHeading);
       this.accuracy = this.lastAccuracy;
     }, 100);
   }
 
-  aboutToDisappear(): void {
+  stopMeasure(): void {
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
     this.sensor.stop();
+    this.active = false;
+  }
+
+  toggleMeasure(): void {
+    tapFeedback();
+    if (this.active) {
+      this.stopMeasure();
+    } else {
+      this.startMeasure();
+    }
   }
 
   // 精度等级 -> 左侧校准状态文案
   statusText(): string {
-    if (!this.active) {
-      return '未读取到磁力计数据';
-    }
-    if (this.accuracy >= ACC_MEDIUM) {
-      return '磁偏角已校正';
-    }
-    if (this.accuracy === ACC_LOW) {
-      return '建议校准 · 远离磁性物体';
-    }
-    return '请校准 · 做 8 字晃动';
+    return compassStatusText(this.active, this.accuracy);
   }
 
   // 精度等级 -> 右侧精度文案
   accuracyText(): string {
-    if (!this.active) {
-      return '--';
-    }
-    if (this.accuracy >= ACC_HIGH) {
-      return '精度 ±2°';
-    }
-    if (this.accuracy === ACC_MEDIUM) {
-      return '精度 ±5°';
-    }
-    if (this.accuracy === ACC_LOW) {
-      return '精度较低';
-    }
-    return '精度不可靠';
+    return compassAccuracyText(this.active, this.accuracy);
   }
 
   showInfo(): void {
-    AlertDialog.show({
-      title: '关于指南针',
-      message: '基于设备磁力计计算方位角，0° 为正北。附近的金属、磁铁、电子设备会干扰读数；'
-        + '若提示精度较低，请远离磁性物体并将手机沿"8"字方向晃动几次以重新校准。读数仅供参考。',
-      confirm: { value: '知道了', action: () => {} }
-    });
+    showInfoDialog(this.getUIContext(), '关于指南针',
+      '基于设备磁力计计算方位角，0° 为正北。附近的金属、磁铁、电子设备会干扰读数；'
+        + '若提示精度较低，请远离磁性物体并将手机沿"8"字方向晃动几次以重新校准。读数仅供参考。');
   }
 
   build() {
@@ -160,6 +161,25 @@ struct CompassPage {
         .border({ width: 1, color: this.th().cardBorder })
         .margin({ top: 20 })
 
+        Row() {
+          Column().width(13).height(13)
+            .borderRadius(this.active ? 3 : 6)
+            .backgroundColor(this.active ? this.th().danger : this.th().accentStrong)
+          Text(this.active ? '停止测量' : '开始测量')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.active ? this.th().danger : this.th().textPrimary)
+            .margin({ left: 9 })
+        }
+        .justifyContent(FlexAlign.Center)
+        .width('100%')
+        .padding({ top: 15, bottom: 15 })
+        .backgroundColor(this.th().surface)
+        .borderRadius(16)
+        .border({ width: 1, color: this.th().cardBorder })
+        .margin({ top: 14 })
+        .onClick(() => this.toggleMeasure())
+
         Text('提示：远离磁性物体、做 8 字晃动可提升精度。读数仅供参考。')
           .fontSize(11)
           .fontColor(this.th().textTertiary)
@@ -199,7 +219,7 @@ struct CompassPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => router.back())
+      .onClick(() => backPage(this.getUIContext()))
       Text('指南针')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

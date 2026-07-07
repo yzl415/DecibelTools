@@ -1,9 +1,9 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, TOOL_ORANGE, TOOL_PURPLE , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from './AppIcon';
+import { pushPage } from '../model/NavigationHelper';
 
 /** 设置 */
 @Component
@@ -50,7 +50,7 @@ export struct SettingsView {
     if (this.recordCount === 0) {
       return;
     }
-    AlertDialog.show({
+    this.getUIContext().showAlertDialog({
       title: '清空测量历史',
       message: `将删除全部 ${this.recordCount} 条本地测量记录，此操作不可撤销。`,
       primaryButton: {
@@ -79,7 +79,7 @@ export struct SettingsView {
         Column() {
           this.NavRow(this.th().tintGreen, TOOL_GREEN, 'wave', '麦克风校准',
             (this.store.calibration >= 0 ? '+' : '') + this.store.calibration.toFixed(1) + ' dB',
-            () => router.pushUrl({ url: 'pages/CalibratePage' }))
+            () => pushPage(this.getUIContext(), 'pages/CalibratePage'))
           this.Divider()
           this.SegRow(this.th().tintIndigo, TOOL_INDIGO, 'A', '默认计权', ['A', 'C'],
             this.weighting, (v: string) => {
@@ -118,7 +118,7 @@ export struct SettingsView {
           this.Divider()
           this.NavRow(this.th().surfaceAlt, this.th().textSecondary, 'ruler', '屏幕校准',
             this.store.pxPerCm.toFixed(0) + ' px/cm',
-            () => router.pushUrl({ url: 'pages/RulerPage' }))
+            () => pushPage(this.getUIContext(), 'pages/RulerPage'))
           this.Divider()
           this.ToggleRow(this.th().surfaceAlt, this.th().textSecondary, 'timer', '震动反馈',
             this.vibration, (v: boolean) => {
@@ -151,7 +151,7 @@ export struct SettingsView {
         this.SectionLabel('关于')
         Column() {
           this.NavRow(this.th().tintPurple, TOOL_PURPLE, 'shield', '隐私政策', '',
-            () => router.pushUrl({ url: 'pages/Privacy' }))
+            () => pushPage(this.getUIContext(), 'pages/Privacy'))
         }
         .width('100%')
         .backgroundColor(this.th().surface)

@@ -1,7 +1,7 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO, MONO_B } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
 import { tapFeedback } from '../model/Haptics';
+import { backPage } from '../model/NavigationHelper';
 
 @Entry
 @Component
@@ -267,7 +267,7 @@ struct RulerPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => router.back())
+      .onClick(() => backPage(this.getUIContext()))
       Text('测距尺')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

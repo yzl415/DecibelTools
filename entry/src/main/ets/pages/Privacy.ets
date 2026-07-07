@@ -1,5 +1,5 @@
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme } from '../model/Theme';
+import { backPage } from '../model/NavigationHelper';
 
 /** 隐私政策页：说明数据收集、存储、权限用途。上架合规必备。 */
 @Entry
@@ -55,7 +55,7 @@ struct Privacy {
       Text('‹ 返回')
         .fontSize(16)
         .fontColor(this.th().accent)
-        .onClick(() => router.back())
+        .onClick(() => backPage(this.getUIContext()))
         .layoutWeight(1)
       Text('隐私政策')
         .fontSize(18)

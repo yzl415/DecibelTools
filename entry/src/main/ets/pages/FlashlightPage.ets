@@ -1,9 +1,10 @@
 import { common } from '@kit.AbilityKit';
-import { router } from '@kit.ArkUI';
 import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO } from '../model/Theme';
 import { TorchController } from '../model/TorchController';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
+import { backPage, showInfoDialog } from '../model/NavigationHelper';
+import { FLASH_MODE_SOS, FLASH_MODE_STEADY, FLASH_MODE_STROBE, FlashlightState } from '../model/FlashlightState';
 
 @Entry
 @Component
@@ -14,13 +15,18 @@ struct FlashlightPage {
   @State freqHz: number = 5;
   @State supported: boolean = true;
   private torch: TorchController = new TorchController();
+  private state: FlashlightState = new FlashlightState();
 
   th(): AppTheme {
     return getTheme(this.themeDark);
   }
 
   aboutToAppear(): void {
-    const ctx = getContext(this) as common.UIAbilityContext;
+    const ctx = this.getHostContext();
+    if (ctx === null) {
+      this.supported = false;
+      return;
+    }
     this.supported = this.torch.init(ctx);
   }
 
@@ -34,6 +40,7 @@ struct FlashlightPage {
     if (this.on) {
       this.allOff();
     } else {
+      this.state.on = true;
       this.applyMode(this.mode);
     }
   }
@@ -41,22 +48,26 @@ struct FlashlightPage {
   allOff(): void {
     this.torch.stopStrobe();
     this.torch.setOn(false);
+    this.state.turnOff();
     this.on = false;
   }
 
   applyMode(m: string): void {
     this.torch.stopStrobe();
-    if (m === 'steady') {
+    if (m === FLASH_MODE_STEADY) {
       this.torch.setOn(true);
-    } else if (m === 'strobe') {
-      this.torch.startStrobe(Math.round(1000 / (this.freqHz * 2)));
+    } else if (m === FLASH_MODE_STROBE) {
+      this.state.setFrequency(this.freqHz);
+      this.torch.startStrobe(this.state.strobeIntervalMs());
     } else {
       this.torch.startSos(220);
     }
+    this.state.on = true;
     this.on = true;
   }
 
   pickMode(m: string): void {
+    this.state.pickMode(m);
     this.mode = m;
     if (this.on) {
       this.applyMode(m);
@@ -64,33 +75,32 @@ struct FlashlightPage {
   }
 
   setFreq(hz: number): void {
-    this.freqHz = hz;
-    if (this.on && this.mode === 'strobe') {
-      this.torch.startStrobe(Math.round(1000 / (hz * 2)));
+    this.state.setFrequency(hz);
+    this.freqHz = this.state.freqHz;
+    if (this.on && this.mode === FLASH_MODE_STROBE) {
+      this.torch.startStrobe(this.state.strobeIntervalMs());
     }
   }
 
   statusText(): string {
-    if (!this.on) {
-      return '已关闭';
-    }
-    if (this.mode === 'strobe') {
-      return '频闪运行中';
-    }
-    if (this.mode === 'sos') {
-      return 'SOS 求救信号';
-    }
-    return '已开启';
+    this.state.on = this.on;
+    this.state.mode = this.mode;
+    return this.state.statusText();
   }
 
   showInfo(): void {
-    AlertDialog.show({
-      title: '关于手电筒',
-      message: '点击中央圆盘开关手电筒。常亮 / 频闪 / SOS 三种模式可切换：'
+    showInfoDialog(this.getUIContext(), '关于手电筒',
+      '点击中央圆盘开关手电筒。常亮 / 频闪 / SOS 三种模式可切换：'
         + '频闪模式下滑块调节闪烁频率，SOS 循环发送国际摩斯求救信号。'
-        + '受系统限制，本设备的手电筒亮度不可调节。频闪可能引起不适，光敏性癫痫人群慎用。',
-      confirm: { value: '知道了', action: () => {} }
-    });
+        + '受系统限制，本设备的手电筒亮度不可调节。频闪可能引起不适，光敏性癫痫人群慎用。');
+  }
+
+  getHostContext(): common.UIAbilityContext | null {
+    const host = this.getUIContext().getHostContext();
+    if (host === undefined) {
+      return null;
+    }
+    return host as common.UIAbilityContext;
   }
 
   build() {
@@ -180,9 +190,9 @@ struct FlashlightPage {
 
         // 模式
         Row({ space: 9 }) {
-          this.ModeTile('steady', '常亮')
-          this.ModeTile('strobe', '频闪')
-          this.ModeTile('sos', 'SOS')
+          this.ModeTile(FLASH_MODE_STEADY, '常亮')
+          this.ModeTile(FLASH_MODE_STROBE, '频闪')
+          this.ModeTile(FLASH_MODE_SOS, 'SOS')
         }
         .width('100%')
 
@@ -234,7 +244,7 @@ struct FlashlightPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => router.back())
+      .onClick(() => backPage(this.getUIContext()))
       Text('手电筒')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
