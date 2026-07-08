@@ -1,7 +1,7 @@
 import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TOOL_PURPLE, TOOL_ORANGE , MONO, MONO_B, withAlpha } from '../model/Theme';
 import { AppIcon } from './AppIcon';
 import { pushPage } from '../model/NavigationHelper';
-import { angleSummary, compassSummary, hasLiveDb, homeDbSummary } from '../model/HomePreviewState';
+import { angleSummary, compassSummary, hasLiveDb, homeDbSummary, homeNoiseTitle } from '../model/HomePreviewState';
 
 /** 仪表项元数据 */
 class Instrument {
@@ -142,7 +142,7 @@ export struct HomeView {
   LiveCard() {
     Column() {
       Row() {
-        Text('环境噪音 · 待测')
+        Text(homeNoiseTitle(this.liveActive))
           .fontSize(11)
           .fontFamily(MONO)
           .fontColor(this.th().textTertiary)

@@ -13,12 +13,8 @@
 import { audio } from '@kit.AudioKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { MOCK_HARDWARE } from './MockConfig';
+import { DecibelLevelProcessor } from './DecibelLevelProcessor';
 
-// 经验偏移：把 dBFS(-x) 抬到接近环境 SPL 的量程。不同机型麦克风灵敏度不同，用户可再校准。
-const SPL_OFFSET: number = 90;
-// A/C 近似偏置：A 计权对低频抑制更强，整体读数略低
-const WEIGHT_A_BIAS: number = -1.5;
-const WEIGHT_C_BIAS: number = 0;
 // 频谱条数量
 const BANDS: number = 14;
 
@@ -30,21 +26,29 @@ export class DecibelMeter {
   private calibration: number = 0;
   private weighting: string = 'A';
   private response: string = 'FAST';
-  private smoothed: number = -1;       // 时间计权后的平滑值
+  private processor: DecibelLevelProcessor = new DecibelLevelProcessor();
   private levels: number[] = [];       // 频谱滚动缓冲（最近 BANDS 帧）
   // 回调：每帧算出一个 dB 值（已含校准 + 计权 + 时间平滑）
   onDb: (db: number) => void = () => {};
 
+  configure(calibration: number, weighting: string, response: string): void {
+    this.calibration = calibration;
+    this.weighting = weighting;
+    this.response = response;
+    this.processor.configure(calibration, weighting, response);
+    this.publishCurrentIfRunning();
+  }
+
   setCalibration(v: number): void {
-    this.calibration = v;
+    this.configure(v, this.weighting, this.response);
   }
 
   setWeighting(w: string): void {
-    this.weighting = w;
+    this.configure(this.calibration, w, this.response);
   }
 
   setResponse(r: string): void {
-    this.response = r;
+    this.configure(this.calibration, this.weighting, r);
   }
 
   isRunning(): boolean {
@@ -74,7 +78,8 @@ export class DecibelMeter {
     if (this.running) {
       return true;
     }
-    this.smoothed = -1;
+    this.processor.reset();
+    this.processor.configure(this.calibration, this.weighting, this.response);
     this.levels = [];
     if (MOCK_HARDWARE) {
       this.startMock();
@@ -128,32 +133,27 @@ export class DecibelMeter {
       return; // 静默帧，跳过避免 -Infinity
     }
     const dbfs: number = 20 * Math.log10(rms / 32768);   // ≤ 0
-    const bias: number = this.weighting === 'C' ? WEIGHT_C_BIAS : WEIGHT_A_BIAS;
-    let raw: number = dbfs + SPL_OFFSET + this.calibration + bias;
-    if (raw < 0) {
-      raw = 0;
-    }
-    this.emit(raw);
+    this.publish(this.processor.processDbfs(dbfs));
   }
 
-  /** 把一个 SPL 原始值经时间计权平滑 + 写入频谱缓冲后回调（真实/模拟共用） */
-  private emit(raw: number): void {
-    // 时间计权（一阶指数平滑）：FAST 反应快，SLOW 平缓
-    const alpha: number = this.response === 'SLOW' ? 0.12 : 0.45;
-    if (this.smoothed < 0) {
-      this.smoothed = raw;
-    } else {
-      this.smoothed = this.smoothed + alpha * (raw - this.smoothed);
-    }
-    // 频谱缓冲：存瞬时值，保留尾部
-    this.levels.push(raw);
+  /** 写入频谱缓冲后回调（真实/模拟共用） */
+  private publish(db: number): void {
+    this.levels.push(db);
     if (this.levels.length > 64) {
       this.levels = this.levels.slice(this.levels.length - 64);
     }
-    this.onDb(this.smoothed);
+    this.onDb(db);
   }
 
-  /** 模拟模式：生成在 35~85 dB 间缓慢游走的假数据，含校准与计权偏置 */
+  private publishCurrentIfRunning(): void {
+    const current: number = this.processor.current();
+    if (!this.running || current < 0) {
+      return;
+    }
+    this.publish(current);
+  }
+
+  /** 模拟模式：生成在 35~85 dB 间缓慢游走的假数据 */
   private startMock(): void {
     this.mockBase = 55;
     this.mockTimer = setInterval(() => {
@@ -163,12 +163,7 @@ export class DecibelMeter {
       } else if (this.mockBase > 85) {
         this.mockBase = 85;
       }
-      const bias: number = this.weighting === 'C' ? WEIGHT_C_BIAS : WEIGHT_A_BIAS;
-      let raw: number = this.mockBase + (Math.random() - 0.5) * 8 + this.calibration + bias;
-      if (raw < 0) {
-        raw = 0;
-      }
-      this.emit(raw);
+      this.publish(this.processor.processBaseSpl(this.mockBase + (Math.random() - 0.5) * 8));
     }, 100);
   }
 

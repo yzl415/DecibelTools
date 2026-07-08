@@ -1,8 +1,8 @@
 import { CompassSensor } from './CompassSensor';
 
 export function shouldRunHomeLive(pageShown: boolean, tabIndex: number, privacyAgreed: boolean,
-  showWelcome: boolean, showPrivacy: boolean): boolean {
-  return pageShown && tabIndex === 0 && privacyAgreed && !showWelcome && !showPrivacy;
+  showWelcome: boolean, showPrivacy: boolean, measurementStarted: boolean): boolean {
+  return pageShown && tabIndex === 0 && privacyAgreed && !showWelcome && !showPrivacy && measurementStarted;
 }
 
 export function hasLiveDb(liveActive: boolean, homeDb: number): boolean {
@@ -11,6 +11,10 @@ export function hasLiveDb(liveActive: boolean, homeDb: number): boolean {
 
 export function homeDbSummary(liveActive: boolean, homeDb: number): string {
   return hasLiveDb(liveActive, homeDb) ? homeDb.toString() + ' dB' : '--';
+}
+
+export function homeNoiseTitle(liveActive: boolean): string {
+  return liveActive ? '环境噪音 · 实时' : '环境噪音 · 待测';
 }
 
 export function angleSummary(homeTilt: number): string {

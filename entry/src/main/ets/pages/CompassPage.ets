@@ -1,5 +1,6 @@
 import { getTheme, AppTheme , MONO, MONO_B } from '../model/Theme';
 import { CompassSensor, ACC_MEDIUM } from '../model/CompassSensor';
+import { CompassMeasurementService, CompassMeasurementSnapshot } from '../model/CompassMeasurementService';
 import { AppIcon } from '../components/AppIcon';
 import { backPage, showInfoDialog } from '../model/NavigationHelper';
 import { compassAccuracyText, compassStatusText } from '../model/CompassStatus';
@@ -12,9 +13,7 @@ struct CompassPage {
   @State heading: number = 0;
   @State active: boolean = false;
   @State accuracy: number = ACC_MEDIUM;
-  private sensor: CompassSensor = new CompassSensor();
-  private lastHeading: number = 0;
-  private lastAccuracy: number = ACC_MEDIUM;
+  private measurement: CompassMeasurementService = CompassMeasurementService.getInstance();
   private uiTimer: number = -1;
 
   th(): AppTheme {
@@ -22,37 +21,62 @@ struct CompassPage {
   }
 
   aboutToAppear(): void {
-    this.sensor.onHeading = (h: number, acc: number) => {
-      this.lastHeading = h;
-      this.lastAccuracy = acc;
-    };
+    this.refreshFromMeasurement();
+    if (this.measurement.isActive()) {
+      this.ensureUiTimer();
+    }
   }
 
   aboutToDisappear(): void {
-    this.stopMeasure();
+    this.detachPage();
   }
 
   startMeasure(): void {
     if (this.active) {
       return;
     }
-    this.active = this.sensor.start();
+    this.active = this.measurement.start();
     if (!this.active) {
       return;
     }
-    this.uiTimer = setInterval(() => {
-      this.heading = Math.round(this.lastHeading);
-      this.accuracy = this.lastAccuracy;
-    }, 100);
+    this.refreshFromMeasurement();
+    this.ensureUiTimer();
   }
 
   stopMeasure(): void {
+    this.detachPage();
+    this.measurement.stop();
+    this.active = false;
+    this.heading = 0;
+    this.accuracy = ACC_MEDIUM;
+  }
+
+  detachPage(): void {
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
-    this.sensor.stop();
-    this.active = false;
+  }
+
+  ensureUiTimer(): void {
+    if (this.uiTimer !== -1) {
+      return;
+    }
+    this.uiTimer = setInterval(() => {
+      this.refreshFromMeasurement();
+    }, 100);
+  }
+
+  refreshFromMeasurement(): void {
+    const snapshot: CompassMeasurementSnapshot = this.measurement.snapshot();
+    this.active = snapshot.active;
+    if (snapshot.active) {
+      this.heading = snapshot.heading;
+      this.accuracy = snapshot.accuracy;
+      return;
+    }
+    this.heading = 0;
+    this.accuracy = ACC_MEDIUM;
   }
 
   toggleMeasure(): void {
@@ -219,7 +243,10 @@ struct CompassPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => backPage(this.getUIContext()))
+      .onClick(() => {
+        this.detachPage();
+        backPage(this.getUIContext());
+      })
       Text('指南针')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

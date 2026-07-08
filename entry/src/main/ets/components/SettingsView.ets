@@ -262,13 +262,15 @@ export struct SettingsView {
         .layoutWeight(1)
       Row() {
         ForEach(opts, (o: string) => {
-          Text(o)
+          Button(o)
+            .height(26)
             .fontSize(11)
             .fontFamily(MONO_B)
             .fontColor(cur === o ? this.th().accentText : this.th().textTertiary)
             .padding({ left: 9, right: 9, top: 4, bottom: 4 })
             .backgroundColor(cur === o ? this.th().accent : '#00000000')
             .borderRadius(6)
+            .stateEffect(true)
             .onClick(() => cb(o))
         })
       }

@@ -2,6 +2,10 @@ import { common } from '@kit.AbilityKit';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
 import { getTheme, AppTheme } from '../model/Theme';
+import { shouldRunHomeLive } from '../model/HomePreviewState';
+import { DecibelMeasurementService, DecibelMeasurementSnapshot } from '../model/DecibelMeasurementService';
+import { AngleMeasurementService, AngleMeasurementSnapshot } from '../model/AngleMeasurementService';
+import { CompassMeasurementService, CompassMeasurementSnapshot } from '../model/CompassMeasurementService';
 import { AppIcon } from '../components/AppIcon';
 import { HomeView } from '../components/HomeView';
 import { HistoryView } from '../components/HistoryView';
@@ -25,7 +29,11 @@ struct Index {
   @State homeHeading: number = -1;      // <0 表示无方位数据
   private store: SettingsStore = SettingsStore.getInstance();
   private recordStore: RecordStore = RecordStore.getInstance();
+  private measurement: DecibelMeasurementService = DecibelMeasurementService.getInstance();
+  private angleMeasurement: AngleMeasurementService = AngleMeasurementService.getInstance();
+  private compassMeasurement: CompassMeasurementService = CompassMeasurementService.getInstance();
   private pageShown: boolean = false;
+  private homeTimer: number = -1;
 
   th(): AppTheme {
     return getTheme(this.themeDark);
@@ -43,10 +51,11 @@ struct Index {
     this.showPrivacy = !this.store.privacyAgreed;
     this.showWelcome = this.store.privacyAgreed && !this.store.onboarded;
     this.loaded = true;
+    this.syncHomePreview();
   }
 
   aboutToDisappear(): void {
-    this.resetHomePreview();
+    this.stopHomePreviewUi();
   }
 
   onPageShow(): void {
@@ -59,12 +68,12 @@ struct Index {
       this.curTab = req;
       AppStorage.delete('requestTab');
     }
-    this.resetHomePreview();
+    this.syncHomePreview();
   }
 
   onPageHide(): void {
     this.pageShown = false;
-    this.resetHomePreview();
+    this.stopHomePreviewUi();
   }
 
   resetHomePreview(): void {
@@ -83,13 +92,61 @@ struct Index {
     await this.store.setPrivacyAgreed();
     this.showPrivacy = false;
     this.showWelcome = !this.store.onboarded;
-    this.resetHomePreview();
+    this.syncHomePreview();
   }
 
   async finishWelcome(): Promise<void> {
     await this.store.setOnboarded();
     this.showWelcome = false;
+    this.syncHomePreview();
+  }
+
+  shouldRunHomePreview(): boolean {
+    const anyMeasurementActive: boolean = this.measurement.isMeasuring()
+      || this.angleMeasurement.isActive() || this.compassMeasurement.isActive();
+    return shouldRunHomeLive(this.pageShown, this.curTab, this.store.privacyAgreed,
+      this.showWelcome, this.showPrivacy, anyMeasurementActive);
+  }
+
+  syncHomePreview(): void {
+    if (this.shouldRunHomePreview()) {
+      this.updateHomePreview();
+      this.ensureHomeTimer();
+      return;
+    }
+    this.stopHomePreviewUi();
+  }
+
+  stopHomePreviewUi(): void {
+    if (this.homeTimer !== -1) {
+      clearInterval(this.homeTimer);
+      this.homeTimer = -1;
+    }
     this.resetHomePreview();
+  }
+
+  updateHomePreview(): void {
+    const snapshot: DecibelMeasurementSnapshot = this.measurement.snapshot(Date.now());
+    this.liveActive = snapshot.measuring;
+    this.homeDb = snapshot.current;
+    this.homeSpectrum = snapshot.spectrum;
+    const angle: AngleMeasurementSnapshot = this.angleMeasurement.snapshot();
+    this.homeTilt = angle.tilt;
+    const compass: CompassMeasurementSnapshot = this.compassMeasurement.snapshot();
+    this.homeHeading = compass.heading;
+  }
+
+  ensureHomeTimer(): void {
+    if (this.homeTimer !== -1) {
+      return;
+    }
+    this.homeTimer = setInterval(() => {
+      if (!this.shouldRunHomePreview()) {
+        this.stopHomePreviewUi();
+        return;
+      }
+      this.updateHomePreview();
+    }, 150);
   }
 
   exitApp(): void {
@@ -143,7 +200,7 @@ struct Index {
         .scrollable(false)
         .onChange((i: number) => {
           this.curTab = i;
-          this.resetHomePreview();
+          this.syncHomePreview();
         })
         .layoutWeight(1)
       }

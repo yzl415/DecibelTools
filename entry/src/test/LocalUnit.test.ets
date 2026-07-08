@@ -2,9 +2,12 @@ import { MeasureRecord } from '../main/ets/model/RecordStore';
 import { averageDb, dayBuckets, filterRecordsByRange, peakDb, peakRecord, peakTimeLabel,
   trendSeries } from '../main/ets/model/HistoryAnalysis';
 import { MeasurementSession } from '../main/ets/model/MeasurementSession';
+import { DecibelLevelProcessor } from '../main/ets/model/DecibelLevelProcessor';
+import { calibratedPxPerCm, resolvedRulerPxPerCm, RULER_CALIBRATION_PRESETS, rulerDistance,
+  shouldAcceptCalibration, systemPxPerCm } from '../main/ets/model/RulerCalibration';
 import { TimerState } from '../main/ets/model/TimerState';
 import { FlashlightState, FLASH_MODE_SOS, FLASH_MODE_STROBE } from '../main/ets/model/FlashlightState';
-import { angleSummary, compassSummary, homeDbSummary, shouldRunHomeLive } from '../main/ets/model/HomePreviewState';
+import { angleSummary, compassSummary, homeDbSummary, homeNoiseTitle, shouldRunHomeLive } from '../main/ets/model/HomePreviewState';
 import { compassAccuracyText, compassStatusText } from '../main/ets/model/CompassStatus';
 import { ACC_HIGH, ACC_LOW, ACC_MEDIUM, ACC_UNRELIABLE } from '../main/ets/model/CompassSensor';
 
@@ -29,10 +32,32 @@ export function test_home_live_requires_visible_tools_tab_and_privacy(): void {
   const pageShown: boolean = true;
 
   // Act
-  const active: boolean = shouldRunHomeLive(pageShown, 0, true, false, false);
+  const active: boolean = shouldRunHomeLive(pageShown, 0, true, false, false, true);
 
   // Assert
   assertTrue(active, 'home live should run');
+}
+
+export function test_home_live_waits_until_measurement_has_started(): void {
+  // Arrange
+  const measurementStarted: boolean = false;
+
+  // Act
+  const active: boolean = shouldRunHomeLive(true, 0, true, false, false, measurementStarted);
+
+  // Assert
+  assertEqual(active, false, 'home live should wait for measurement start');
+}
+
+export function test_home_live_restarts_after_detail_return_to_tools_tab(): void {
+  // Arrange
+  const pageShownAfterReturn: boolean = true;
+
+  // Act
+  const active: boolean = shouldRunHomeLive(pageShownAfterReturn, 0, true, false, false, true);
+
+  // Assert
+  assertTrue(active, 'home live should restart after returning to tools tab');
 }
 
 export function test_home_microphone_denied_does_not_use_recent_db(): void {
@@ -44,6 +69,17 @@ export function test_home_microphone_denied_does_not_use_recent_db(): void {
 
   // Assert
   assertEqual(value, '--', 'db summary should use placeholder');
+}
+
+export function test_home_live_title_reports_realtime_when_active(): void {
+  // Arrange
+  const liveActive: boolean = true;
+
+  // Act
+  const title: string = homeNoiseTitle(liveActive);
+
+  // Assert
+  assertEqual(title, '环境噪音 · 实时', 'home live title should report realtime state');
 }
 
 export function test_home_angle_and_compass_empty_values_show_placeholders(): void {
@@ -95,6 +131,84 @@ export function test_measurement_stop_persists_only_when_saved_with_duration(): 
 
   // Assert
   assertTrue(summary.shouldPersist, 'record should persist');
+}
+
+export function test_decibel_weighting_change_rebases_current_level(): void {
+  // Arrange
+  const processor: DecibelLevelProcessor = new DecibelLevelProcessor();
+  processor.configure(0, 'A', 'FAST');
+  const aWeighted: number = processor.processBaseSpl(60);
+
+  // Act
+  processor.configure(0, 'C', 'FAST');
+  const cWeighted: number = processor.current();
+
+  // Assert
+  assertEqual(`${Math.round(aWeighted)}|${Math.round(cWeighted)}`, '56|60',
+    'weighting change should immediately rebase current level');
+}
+
+export function test_decibel_response_fast_tracks_level_jump_more_than_slow(): void {
+  // Arrange
+  const fast: DecibelLevelProcessor = new DecibelLevelProcessor();
+  const slow: DecibelLevelProcessor = new DecibelLevelProcessor();
+  fast.configure(0, 'C', 'FAST');
+  slow.configure(0, 'C', 'SLOW');
+  fast.processBaseSpl(50);
+  slow.processBaseSpl(50);
+
+  // Act
+  const fastAfterJump: number = fast.processBaseSpl(80);
+  const slowAfterJump: number = slow.processBaseSpl(80);
+
+  // Assert
+  assertTrue(fastAfterJump > slowAfterJump + 10, 'fast response should track a level jump sooner');
+}
+
+export function test_ruler_calibration_sets_selected_reference_length(): void {
+  // Arrange
+  const markerGapVp: number = 200;
+
+  // Act
+  const pxPerCm: number = calibratedPxPerCm(markerGapVp, 10, 38);
+  const distance: number = rulerDistance(markerGapVp, pxPerCm, 'cm');
+
+  // Assert
+  assertEqual(distance, 10, 'calibration should map marker gap to selected reference length');
+}
+
+export function test_ruler_calibration_presets_avoid_oversized_references(): void {
+  // Arrange
+  const oversized: number = RULER_CALIBRATION_PRESETS.filter((preset) => preset.cm > 5.4).length;
+
+  // Act
+  const labels: string = RULER_CALIBRATION_PRESETS.map((preset) => preset.label).join('|');
+
+  // Assert
+  assertEqual(`${labels.includes('A4')}|${oversized}`, 'false|0',
+    'ruler presets should avoid oversized references');
+}
+
+export function test_ruler_default_scale_uses_system_density(): void {
+  // Arrange
+  const systemScale: number = systemPxPerCm(480, 3);
+
+  // Act
+  const scale: number = resolvedRulerPxPerCm(38, systemScale);
+
+  // Assert
+  assertEqual(scale, 63, 'default ruler scale should use system density');
+}
+
+export function test_ruler_calibration_rejects_mismatched_marker_gap(): void {
+  // Arrange
+  const systemScale: number = 63;
+
+  // Act
+  const accepted: boolean = shouldAcceptCalibration(160, 5.4, systemScale);
+
+  // Assert
+  assertEqual(accepted, false, 'calibration should reject mismatched marker gap');
 }
 
 export function test_history_empty_records_returns_zero_metrics(): void {

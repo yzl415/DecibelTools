@@ -1,15 +1,13 @@
 import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
-import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO, LEVEL_NOISY_THRESHOLD } from '../model/Theme';
-import { DecibelMeter } from '../model/DecibelMeter';
+import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO } from '../model/Theme';
 import { MOCK_HARDWARE } from '../model/MockConfig';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
-import { alertFeedback, tapFeedback } from '../model/Haptics';
+import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
 import { backPage } from '../model/NavigationHelper';
-import { MeasurementSession } from '../model/MeasurementSession';
-
-const OVER_ALERT_COOLDOWN_MS: number = 6000;
+import { DecibelMeasurementService, DecibelMeasurementSnapshot } from '../model/DecibelMeasurementService';
+import { MeasurementSummary } from '../model/MeasurementSession';
 
 @Entry
 @Component
@@ -28,14 +26,11 @@ struct DecibelPage {
   @State spectrum: number[] = [];
   @State weighting: string = 'A';
   @State response: string = 'FAST';
-  private meter: DecibelMeter = new DecibelMeter();
   private store: SettingsStore = SettingsStore.getInstance();
   private recordStore: RecordStore = RecordStore.getInstance();
-  private session: MeasurementSession = new MeasurementSession();
+  private measurement: DecibelMeasurementService = DecibelMeasurementService.getInstance();
   private count: number = 0;
   private uiTimer: number = -1;
-  private latest: number = 0;
-  private lastAlertTs: number = 0;
   // 表盘彩色弧用 Canvas 绘制（标准 HTML5 角度：0°=3点钟，顺时针为正），
   // 避免 sweepGradient 角度约定不确定 + end 越界(>360) 被忽略的问题。
   private arcSettings: RenderingContextSettings = new RenderingContextSettings(true);
@@ -69,37 +64,22 @@ struct DecibelPage {
   aboutToAppear(): void {
     this.weighting = this.store.weighting;
     this.response = this.store.response;
-    this.meter.setCalibration(this.store.calibration);
-    this.meter.setWeighting(this.weighting);
-    this.meter.setResponse(this.response);
-    this.meter.onDb = (db: number) => {
-      this.latest = db;
-      // 仅记录测量态累计统计与超标提醒；纯预览态只更新实时值
-      if (!this.measuring) {
-        return;
-      }
-      this.session.record(db);
-      const summary = this.session.snapshot(Date.now());
-      this.count = summary.count;
-      this.peak = summary.peak;
-      this.minDb = summary.min;
-      if (this.store.overLimitAlert && db >= LEVEL_NOISY_THRESHOLD) {
-        const now: number = Date.now();
-        if (now - this.lastAlertTs >= OVER_ALERT_COOLDOWN_MS) {
-          this.lastAlertTs = now;
-          alertFeedback();
-        }
-      }
-    };
+    this.configureMeasurement();
+    this.refreshFromMeasurement();
+    if (this.measurement.isMeasuring()) {
+      this.ensureUiTimer();
+    }
   }
 
   aboutToDisappear(): void {
-    this.teardown();
+    this.detachPage();
   }
 
   // 点击开始后才开启采集，避免未开始测量时显示实时读数。
   async startPreview(): Promise<boolean> {
-    if (this.previewing || this.measuring) {
+    if (this.measurement.isMeasuring()) {
+      this.refreshFromMeasurement();
+      this.ensureUiTimer();
       return true;
     }
     if (this.starting) {
@@ -130,7 +110,8 @@ struct DecibelPage {
       }
     }
     this.denied = false;
-    const ok: boolean = await this.meter.start();
+    this.configureMeasurement();
+    const ok: boolean = await this.measurement.start(Date.now());
     if (!ok) {
       this.denied = true;
       this.starting = false;
@@ -148,26 +129,13 @@ struct DecibelPage {
       return;
     }
     this.uiTimer = setInterval(() => {
-      this.current = Math.round(this.latest);
-      this.needle = this.needleAngle();
-      this.spectrum = this.meter.getSpectrum();
-      if (this.measuring) {
-        const summary = this.session.snapshot(Date.now());
-        this.avg = summary.avg;
-        this.elapsed = summary.elapsedSec;
-      }
+      this.refreshFromMeasurement();
     }, 150);
   }
 
   // 开始记录测量：重置统计并翻到测量态。
   startMeasure(): void {
-    this.count = 0;
-    this.peak = 0;
-    this.minDb = 0;
-    this.elapsed = 0;
-    this.lastAlertTs = 0;
-    this.session.start(Date.now());
-    this.measuring = true;
+    this.refreshFromMeasurement();
   }
 
   // 停止记录测量（可选保存），并关闭采集回到待测状态。
@@ -175,40 +143,29 @@ struct DecibelPage {
     if (!this.measuring) {
       return;
     }
-    this.measuring = false;
-    const summary = this.session.stop(save, this.elapsed);
+    const summary: MeasurementSummary = await this.measurement.stop(save, this.recordStore, this.store);
     this.avg = summary.avg;
     this.minDb = summary.min;
     this.peak = summary.peak;
-    if (this.peak > this.store.historyMaxDb) {
-      await this.store.setHistoryMaxDb(Math.round(this.peak));
-    }
-    if (summary.shouldPersist) {
-      await this.recordStore.add('测量记录', this.elapsed,
-        Math.round(this.minDb), this.avg, Math.round(this.peak));
-    }
+    this.elapsed = summary.elapsedSec;
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
+    this.measuring = false;
     this.previewing = false;
-    this.latest = 0;
     this.current = 0;
     this.needle = -80;
     this.spectrum = [];
-    await this.meter.stop();
   }
 
-  // 释放全部资源（离开页面）
-  async teardown(): Promise<void> {
-    this.measuring = false;
+  // 页面离开只解绑 UI 刷新；共享测量需用户手动点“停止测量”才结束。
+  detachPage(): void {
     this.starting = false;
-    this.previewing = false;
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
-    await this.meter.stop();
   }
 
   async toggle(): Promise<void> {
@@ -228,14 +185,32 @@ struct DecibelPage {
 
   setWeighting(w: string): void {
     this.weighting = w;
-    this.meter.setWeighting(w);
+    this.configureMeasurement();
     this.store.setWeighting(w);
   }
 
   setResponse(r: string): void {
     this.response = r;
-    this.meter.setResponse(r);
+    this.configureMeasurement();
     this.store.setResponse(r);
+  }
+
+  configureMeasurement(): void {
+    this.measurement.configure(this.store.calibration, this.weighting, this.response, this.store.overLimitAlert);
+  }
+
+  refreshFromMeasurement(): void {
+    const snapshot: DecibelMeasurementSnapshot = this.measurement.snapshot(Date.now());
+    this.measuring = snapshot.measuring;
+    this.previewing = snapshot.measuring;
+    this.current = snapshot.current;
+    this.count = snapshot.count;
+    this.peak = snapshot.peak;
+    this.avg = snapshot.avg;
+    this.minDb = snapshot.min;
+    this.elapsed = snapshot.elapsedSec;
+    this.spectrum = snapshot.spectrum;
+    this.needle = this.needleAngle();
   }
 
   // 是否有实时读数（预览或测量中）
@@ -266,6 +241,11 @@ struct DecibelPage {
       return null;
     }
     return host as common.UIAbilityContext;
+  }
+
+  async leavePage(): Promise<void> {
+    this.detachPage();
+    backPage(this.getUIContext());
   }
   // PH_DB
 
@@ -335,8 +315,8 @@ struct DecibelPage {
     Row({ space: 8 }) {
       // 计权
       Row() {
-        this.Seg('dB(A)', this.weighting === 'A', TOOL_GREEN, () => this.setWeighting('A'))
-        this.Seg('dB(C)', this.weighting === 'C', TOOL_GREEN, () => this.setWeighting('C'))
+        this.WeightSeg('dB(A)', 'A')
+        this.WeightSeg('dB(C)', 'C')
       }
       .padding(2)
       .backgroundColor(this.th().surface)
@@ -344,8 +324,8 @@ struct DecibelPage {
       .border({ width: 1, color: this.th().cardBorder })
       // 时间计权
       Row() {
-        this.Seg('FAST', this.response === 'FAST', TOOL_INDIGO, () => this.setResponse('FAST'))
-        this.Seg('SLOW', this.response === 'SLOW', TOOL_INDIGO, () => this.setResponse('SLOW'))
+        this.ResponseSeg('FAST')
+        this.ResponseSeg('SLOW')
       }
       .padding(2)
       .backgroundColor(this.th().surface)
@@ -358,15 +338,31 @@ struct DecibelPage {
   }
 
   @Builder
-  Seg(label: string, active: boolean, activeColor: string, cb: () => void) {
-    Text(label)
-      .fontSize(11)
-      .fontFamily(MONO_B)
-      .fontColor(active ? this.th().accentText : this.th().textTertiary)
-      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-      .backgroundColor(active ? activeColor : '#00000000')
-      .borderRadius(6)
-      .onClick(cb)
+  WeightSeg(label: string, value: string) {
+    Button(label)
+    .width(72)
+    .height(30)
+    .fontSize(11)
+    .fontFamily(MONO_B)
+    .fontColor(this.weighting === value ? this.th().accentText : this.th().textTertiary)
+    .backgroundColor(this.weighting === value ? TOOL_GREEN : '#00000000')
+    .borderRadius(6)
+    .stateEffect(true)
+    .onClick(() => this.setWeighting(value))
+  }
+
+  @Builder
+  ResponseSeg(value: string) {
+    Button(value)
+    .width(72)
+    .height(30)
+    .fontSize(11)
+    .fontFamily(MONO_B)
+    .fontColor(this.response === value ? this.th().accentText : this.th().textTertiary)
+    .backgroundColor(this.response === value ? TOOL_INDIGO : '#00000000')
+    .borderRadius(6)
+    .stateEffect(true)
+    .onClick(() => this.setResponse(value))
   }
 
   // 单根主刻度短线（满尺寸容器旋转，短线在顶部）
@@ -588,7 +584,7 @@ struct DecibelPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => backPage(this.getUIContext()))
+      .onClick(() => this.leavePage())
       Text('分贝仪')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
@@ -602,7 +598,7 @@ struct DecibelPage {
       }
       .onClick(() => {
         AppStorage.setOrCreate('requestTab', 1);
-        backPage(this.getUIContext());
+        this.leavePage();
       })
     }
     .width('100%')

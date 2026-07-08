@@ -1,5 +1,5 @@
 import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, withAlpha , MONO, MONO_B } from '../model/Theme';
-import { AngleSensor } from '../model/AngleSensor';
+import { AngleMeasurementService, AngleMeasurementSnapshot } from '../model/AngleMeasurementService';
 import { AppIcon } from '../components/AppIcon';
 import { tapFeedback } from '../model/Haptics';
 import { backPage, showInfoDialog } from '../model/NavigationHelper';
@@ -11,11 +11,7 @@ struct AnglePage {
   @State pitch: number = 0;
   @State roll: number = 0;
   @State active: boolean = false;
-  private sensor: AngleSensor = new AngleSensor();
-  private lastPitch: number = 0;
-  private lastRoll: number = 0;
-  private calPitch: number = 0;
-  private calRoll: number = 0;
+  private measurement: AngleMeasurementService = AngleMeasurementService.getInstance();
   private uiTimer: number = -1;
 
   th(): AppTheme {
@@ -23,37 +19,57 @@ struct AnglePage {
   }
 
   aboutToAppear(): void {
-    this.sensor.onAngle = (pitch: number, roll: number) => {
-      this.lastPitch = pitch;
-      this.lastRoll = roll;
-    };
+    this.refreshFromMeasurement();
+    if (this.measurement.isActive()) {
+      this.ensureUiTimer();
+    }
   }
 
   aboutToDisappear(): void {
-    this.stopMeasure();
+    this.detachPage();
   }
 
   startMeasure(): void {
     if (this.active) {
       return;
     }
-    this.active = this.sensor.start();
+    this.active = this.measurement.start();
     if (!this.active) {
       return;
     }
-    this.uiTimer = setInterval(() => {
-      this.pitch = Math.round((this.lastPitch - this.calPitch) * 10) / 10;
-      this.roll = Math.round((this.lastRoll - this.calRoll) * 10) / 10;
-    }, 100);
+    this.refreshFromMeasurement();
+    this.ensureUiTimer();
   }
 
   stopMeasure(): void {
+    this.detachPage();
+    this.measurement.stop();
+    this.active = false;
+    this.pitch = 0;
+    this.roll = 0;
+  }
+
+  detachPage(): void {
     if (this.uiTimer !== -1) {
       clearInterval(this.uiTimer);
       this.uiTimer = -1;
     }
-    this.sensor.stop();
-    this.active = false;
+  }
+
+  ensureUiTimer(): void {
+    if (this.uiTimer !== -1) {
+      return;
+    }
+    this.uiTimer = setInterval(() => {
+      this.refreshFromMeasurement();
+    }, 100);
+  }
+
+  refreshFromMeasurement(): void {
+    const snapshot: AngleMeasurementSnapshot = this.measurement.snapshot();
+    this.active = snapshot.active;
+    this.pitch = snapshot.pitch;
+    this.roll = snapshot.roll;
   }
 
   toggleMeasure(): void {
@@ -67,8 +83,8 @@ struct AnglePage {
 
   calibrate(): void {
     tapFeedback();
-    this.calPitch = this.lastPitch;
-    this.calRoll = this.lastRoll;
+    this.measurement.calibrate();
+    this.refreshFromMeasurement();
   }
 
   showInfo(): void {
@@ -226,7 +242,10 @@ struct AnglePage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => backPage(this.getUIContext()))
+      .onClick(() => {
+        this.detachPage();
+        backPage(this.getUIContext());
+      })
       Text('角度仪')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

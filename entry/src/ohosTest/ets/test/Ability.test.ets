@@ -13,7 +13,7 @@ export function test_home_live_stops_outside_tools_tab(): void {
   const historyTab: number = 1;
 
   // Act
-  const active: boolean = shouldRunHomeLive(true, historyTab, true, false, false);
+  const active: boolean = shouldRunHomeLive(true, historyTab, true, false, false, true);
 
   // Assert
   assertEqual(active, false, 'home live should stop outside tools tab');

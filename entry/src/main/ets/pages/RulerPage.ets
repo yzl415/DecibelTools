@@ -1,7 +1,10 @@
 import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO, MONO_B } from '../model/Theme';
+import display from '@ohos.display';
 import { SettingsStore } from '../model/SettingsStore';
 import { tapFeedback } from '../model/Haptics';
 import { backPage } from '../model/NavigationHelper';
+import { calibratedPxPerCm, resolvedRulerPxPerCm, RULER_CALIBRATION_PRESETS, RulerCalibrationPreset,
+  rulerDistance, shouldAcceptCalibration, systemPxPerCm } from '../model/RulerCalibration';
 
 @Entry
 @Component
@@ -12,6 +15,8 @@ struct RulerPage {
   @State botY: number = 204;      // 下标线位置
   @State calMode: boolean = false; // 校准模式
   @State pxPerCm: number = 38;
+  @State systemPpc: number = 0;
+  @State calibMessage: string = '';
   private store: SettingsStore = SettingsStore.getInstance();
   private dragTop: number = 0;
   private dragBot: number = 0;
@@ -23,17 +28,13 @@ struct RulerPage {
 
   aboutToAppear(): void {
     this.unit = this.store.unit;
-    this.pxPerCm = this.store.pxPerCm;
+    this.systemPpc = this.readSystemPxPerCm();
+    this.pxPerCm = resolvedRulerPxPerCm(this.store.pxPerCm, this.systemPpc);
   }
 
   // 当前两线间距离（按单位）
   distance(): number {
-    const vp: number = Math.abs(this.botY - this.topY);
-    const cm: number = vp / this.pxPerCm;
-    if (this.unit === 'in') {
-      return Math.round(cm / 2.54 * 100) / 100;
-    }
-    return Math.round(cm * 10) / 10;
+    return rulerDistance(this.botY - this.topY, this.pxPerCm, this.unit);
   }
 
   // 生成刻度（每 0.5cm 一短线，每 1cm 一长线带数字），覆盖 rulerH
@@ -68,16 +69,33 @@ struct RulerPage {
     this.botY = 44 + this.pxPerCm * 5;
   }
 
-  // 校准：用户用实物（如硬币 / 银行卡 8.56cm）对齐两线，输入实际厘米后反算 px/cm
+  // 校准：用户用实物（如硬币 / 银行卡 8.56cm）对齐两线，按实际厘米反算 px/cm。
   applyCalib(realCm: number): void {
     tapFeedback();
     const vp: number = Math.abs(this.botY - this.topY);
-    if (realCm > 0 && vp > 10) {
-      const ppc: number = vp / realCm;
-      this.pxPerCm = Math.round(ppc * 10) / 10;
-      this.store.setPxPerCm(this.pxPerCm);
+    if (!shouldAcceptCalibration(vp, realCm, this.systemPpc)) {
+      this.calibMessage = '当前两条标线还没有夹住该参考物，请先对齐实物两端';
+      return;
     }
+    const ppc: number = calibratedPxPerCm(vp, realCm, this.pxPerCm);
+    this.pxPerCm = ppc;
+    this.store.setPxPerCm(this.pxPerCm);
+    this.calibMessage = '';
     this.calMode = false;
+  }
+
+  toggleCalMode(): void {
+    this.calibMessage = '';
+    this.calMode = !this.calMode;
+  }
+
+  readSystemPxPerCm(): number {
+    try {
+      const d: display.Display = display.getDefaultDisplaySync();
+      return systemPxPerCm(d.densityDPI, d.densityPixels);
+    } catch (e) {
+      return 0;
+    }
   }
 
   build() {
@@ -140,7 +158,7 @@ struct RulerPage {
         .height(this.rulerH)
 
         Text(this.calMode
-          ? '把已知长度物体两端对齐两条标线，然后点下方按钮输入实际长度'
+          ? '先让两条标线夹住参考物两端，再选择参考物的实际长度'
           : '拖动两条标线测量物体长度 · 先校准屏幕更准确')
           .fontSize(11)
           .fontColor(this.th().textTertiary)
@@ -149,7 +167,7 @@ struct RulerPage {
           .margin({ top: 14, bottom: 12 })
 
         Row({ space: 9 }) {
-          this.ActionBtn('校准', false, () => this.calMode = !this.calMode)
+          this.ActionBtn('校准', false, () => this.toggleCalMode())
           this.ActionBtn('归零', true, () => this.zero())
         }
         .width('100%')
@@ -231,11 +249,19 @@ struct RulerPage {
         .width('100%')
         .margin({ bottom: 10 })
       Row({ space: 8 }) {
-        this.CalibChip('银行卡 8.56', 8.56)
-        this.CalibChip('一元硬币 2.5', 2.5)
-        this.CalibChip('A4 宽 21', 21)
+        ForEach(RULER_CALIBRATION_PRESETS, (preset: RulerCalibrationPreset) => {
+          this.CalibChip(preset)
+        })
       }
       .width('100%')
+      if (this.calibMessage.length > 0) {
+        Text(this.calibMessage)
+          .fontSize(11)
+          .fontColor(this.th().danger)
+          .lineHeight(16)
+          .width('100%')
+          .margin({ top: 10 })
+      }
     }
     .width('100%')
     .padding(16)
@@ -246,17 +272,17 @@ struct RulerPage {
   }
 
   @Builder
-  CalibChip(label: string, cm: number) {
-    Text(label)
+  CalibChip(preset: RulerCalibrationPreset) {
+    Button(preset.label)
       .fontSize(11)
       .fontColor(this.th().textPrimary)
-      .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 10, bottom: 10 })
       .backgroundColor(this.th().surfaceAlt)
       .borderRadius(10)
       .border({ width: 1, color: this.th().cardBorder })
-      .onClick(() => this.applyCalib(cm))
+      .stateEffect(true)
+      .onClick(() => this.applyCalib(preset.cm))
   }
 
   @Builder
