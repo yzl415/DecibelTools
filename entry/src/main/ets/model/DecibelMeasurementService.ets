@@ -31,11 +31,15 @@ export class DecibelMeasurementService {
   private peakDb: number = 0;
   private elapsedSec: number = 0;
   private count: number = 0;
+  private sumDb: number = 0;
+  private startMs: number = 0;
   private calibration: number = 0;
   private weighting: string = 'A';
   private response: string = 'FAST';
   private overLimitAlert: boolean = true;
   private lastAlertTs: number = 0;
+  private latestSeq: number = 0;
+  private recordedSeq: number = 0;
 
   private constructor() {
     this.meter.onDb = (db: number) => this.handleDb(db);
@@ -66,25 +70,23 @@ export class DecibelMeasurementService {
     }
     this.resetStats();
     this.session.start(nowMs);
+    this.measuring = true;
+    this.startMs = nowMs;
     this.lastAlertTs = 0;
     const ok: boolean = await this.ensureRunning();
     if (!ok) {
       this.session.stop(false, 0);
       this.measuring = false;
+      this.resetStats();
       return false;
     }
-    this.measuring = true;
     return true;
   }
 
   snapshot(nowMs: number): DecibelMeasurementSnapshot {
     if (this.measuring) {
-      const summary: MeasurementSummary = this.session.snapshot(nowMs);
-      this.count = summary.count;
-      this.minDb = summary.min;
-      this.avgDb = summary.avg;
-      this.peakDb = summary.peak;
-      this.elapsedSec = summary.elapsedSec;
+      this.recordLatestIfNeeded(nowMs);
+      this.elapsedSec = Math.floor((nowMs - this.startMs) / 1000);
     }
     const out: DecibelMeasurementSnapshot = new DecibelMeasurementSnapshot();
     out.measuring = this.measuring;
@@ -102,7 +104,9 @@ export class DecibelMeasurementService {
     if (!this.measuring) {
       return new MeasurementSummary();
     }
-    const summary: MeasurementSummary = this.session.stop(save, this.elapsedSec);
+    this.recordLatestIfNeeded(Date.now());
+    this.session.stop(false, this.elapsedSec);
+    const summary: MeasurementSummary = this.currentSummary(save);
     this.measuring = false;
     this.count = summary.count;
     this.minDb = summary.min;
@@ -136,24 +140,43 @@ export class DecibelMeasurementService {
 
   private handleDb(db: number): void {
     this.latest = db;
+    this.latestSeq++;
     this.current = Math.round(db);
-    if (!this.measuring) {
+    this.recordLatestIfNeeded(Date.now());
+  }
+
+  private recordLatestIfNeeded(nowMs: number): void {
+    if (!this.measuring || this.latestSeq === this.recordedSeq || this.latest <= 0) {
       return;
     }
-    this.session.record(db);
-    const summary: MeasurementSummary = this.session.snapshot(Date.now());
-    this.count = summary.count;
-    this.minDb = summary.min;
-    this.avgDb = summary.avg;
-    this.peakDb = summary.peak;
-    this.elapsedSec = summary.elapsedSec;
-    if (this.overLimitAlert && db >= LEVEL_NOISY_THRESHOLD) {
-      const now: number = Date.now();
-      if (now - this.lastAlertTs >= OVER_ALERT_COOLDOWN_MS) {
-        this.lastAlertTs = now;
+    this.sumDb += this.latest;
+    this.count++;
+    if (this.minDb === 0 || this.latest < this.minDb) {
+      this.minDb = Math.round(this.latest);
+    }
+    if (this.latest > this.peakDb) {
+      this.peakDb = Math.round(this.latest);
+    }
+    this.avgDb = Math.round(this.sumDb / this.count);
+    this.elapsedSec = Math.floor((nowMs - this.startMs) / 1000);
+    this.recordedSeq = this.latestSeq;
+    if (this.overLimitAlert && this.latest >= LEVEL_NOISY_THRESHOLD) {
+      if (nowMs - this.lastAlertTs >= OVER_ALERT_COOLDOWN_MS) {
+        this.lastAlertTs = nowMs;
         alertFeedback();
       }
     }
+  }
+
+  private currentSummary(save: boolean): MeasurementSummary {
+    const out: MeasurementSummary = new MeasurementSummary();
+    out.count = this.count;
+    out.min = this.minDb;
+    out.avg = this.avgDb;
+    out.peak = this.peakDb;
+    out.elapsedSec = this.elapsedSec;
+    out.shouldPersist = save && this.count > 0 && this.elapsedSec >= 1;
+    return out;
   }
 
   private resetStats(): void {
@@ -164,5 +187,9 @@ export class DecibelMeasurementService {
     this.peakDb = 0;
     this.elapsedSec = 0;
     this.count = 0;
+    this.sumDb = 0;
+    this.startMs = 0;
+    this.latestSeq = 0;
+    this.recordedSeq = 0;
   }
 }

@@ -14,6 +14,7 @@ import { audio } from '@kit.AudioKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { MOCK_HARDWARE } from './MockConfig';
 import { DecibelLevelProcessor } from './DecibelLevelProcessor';
+import { normalizeDecibelSpectrumHeight } from './DecibelDisplayRange';
 
 // 频谱条数量
 const BANDS: number = 14;
@@ -61,14 +62,7 @@ export class DecibelMeter {
     for (let i = 0; i < BANDS; i++) {
       const idx: number = this.levels.length - BANDS + i;
       const v: number = idx >= 0 ? this.levels[idx] : 0;
-      // 30~110 dB 映射到 0~1
-      let n: number = (v - 30) / 80;
-      if (n < 0.06) {
-        n = 0.06;
-      } else if (n > 1) {
-        n = 1;
-      }
-      out.push(n);
+      out.push(normalizeDecibelSpectrumHeight(v));
     }
     return out;
   }

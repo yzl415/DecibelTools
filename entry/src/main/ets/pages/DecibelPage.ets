@@ -8,6 +8,8 @@ import { AppIcon } from '../components/AppIcon';
 import { backPage } from '../model/NavigationHelper';
 import { DecibelMeasurementService, DecibelMeasurementSnapshot } from '../model/DecibelMeasurementService';
 import { MeasurementSummary } from '../model/MeasurementSession';
+import { DECIBEL_DISPLAY_MAX_DB, DECIBEL_DISPLAY_MIN_DB, decibelFromSpectrumHeight,
+  normalizeDecibelDisplayDb } from '../model/DecibelDisplayRange';
 
 @Entry
 @Component
@@ -220,9 +222,8 @@ struct DecibelPage {
 
   // dB -> 指针角度（30dB≈-80°，120dB≈+70°）
   needleAngle(): number {
-    const db: number = this.hasReading() ? this.current : 30;
-    const c: number = Math.max(30, Math.min(120, db));
-    return -80 + (c - 30) / 90 * 150;
+    const db: number = this.hasReading() ? this.current : DECIBEL_DISPLAY_MIN_DB;
+    return -80 + normalizeDecibelDisplayDb(db) * 150;
   }
 
   dispDb(): string {
@@ -463,13 +464,13 @@ struct DecibelPage {
       // 刻度数字：与设计稿一致，中心点落在 (66,68)/(194,68)/(66,192)/(194,192)，
       // markAnchor 50% 复刻 translate(-50%,-50%)，半径约89落在指针尖(半径93)以内，永不被压。
       // 放最后渲染，双保险盖在指针之上。
-      Text('30').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
+      Text(DECIBEL_DISPLAY_MIN_DB.toString()).fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 66, y: 192 }).markAnchor({ x: '50%', y: '50%' })
       Text('60').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 66, y: 68 }).markAnchor({ x: '50%', y: '50%' })
       Text('90').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 194, y: 68 }).markAnchor({ x: '50%', y: '50%' })
-      Text('120').fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
+      Text(DECIBEL_DISPLAY_MAX_DB.toString()).fontSize(11).fontFamily(MONO).fontColor(this.th().textSecondary)
         .position({ x: 194, y: 192 }).markAnchor({ x: '50%', y: '50%' })
     }
     .width(260)
@@ -486,7 +487,7 @@ struct DecibelPage {
           .width(5)
           .height(Math.max(3, 42 * h))
           .borderRadius(2.5)
-          .backgroundColor(levelColor(30 + h * 80))
+          .backgroundColor(levelColor(decibelFromSpectrumHeight(h)))
       })
     }
     .width('100%')

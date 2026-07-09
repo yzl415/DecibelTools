@@ -4,6 +4,8 @@ import {
   test_compass_accuracy_mapping_never_claims_calibrated_when_inactive,
   test_compass_accuracy_mapping_reports_high_medium_low_and_unreliable,
   test_decibel_response_fast_tracks_level_jump_more_than_slow,
+  test_decibel_display_range_clamps_values_above_gauge_maximum,
+  test_decibel_spectrum_height_keeps_low_values_visible,
   test_decibel_weighting_change_rebases_current_level,
   test_flashlight_mode_switch_keeps_frequency_state_isolated,
   test_flashlight_status_reflects_current_mode_without_waiting,
@@ -73,6 +75,8 @@ export default function testsuite(): void {
   test_measurement_stop_persists_only_when_saved_with_duration();
   test_decibel_weighting_change_rebases_current_level();
   test_decibel_response_fast_tracks_level_jump_more_than_slow();
+  test_decibel_display_range_clamps_values_above_gauge_maximum();
+  test_decibel_spectrum_height_keeps_low_values_visible();
   test_ruler_calibration_sets_selected_reference_length();
   test_ruler_calibration_presets_avoid_oversized_references();
   test_ruler_default_scale_uses_system_density();

@@ -3,6 +3,8 @@ import { averageDb, dayBuckets, filterRecordsByRange, peakDb, peakRecord, peakTi
   trendSeries } from '../main/ets/model/HistoryAnalysis';
 import { MeasurementSession } from '../main/ets/model/MeasurementSession';
 import { DecibelLevelProcessor } from '../main/ets/model/DecibelLevelProcessor';
+import { DECIBEL_SPECTRUM_MIN_HEIGHT, decibelFromSpectrumHeight, normalizeDecibelDisplayDb,
+  normalizeDecibelSpectrumHeight } from '../main/ets/model/DecibelDisplayRange';
 import { calibratedPxPerCm, resolvedRulerPxPerCm, RULER_CALIBRATION_PRESETS, rulerDistance,
   shouldAcceptCalibration, systemPxPerCm } from '../main/ets/model/RulerCalibration';
 import { TimerState } from '../main/ets/model/TimerState';
@@ -163,6 +165,29 @@ export function test_decibel_response_fast_tracks_level_jump_more_than_slow(): v
 
   // Assert
   assertTrue(fastAfterJump > slowAfterJump + 10, 'fast response should track a level jump sooner');
+}
+
+export function test_decibel_display_range_clamps_values_above_gauge_maximum(): void {
+  // Arrange
+  const db: number = 135;
+
+  // Act
+  const normalized: number = normalizeDecibelDisplayDb(db);
+  const mappedDb: number = decibelFromSpectrumHeight(normalized);
+
+  // Assert
+  assertEqual(`${normalized}|${mappedDb}`, '1|120', 'display range should clamp above the gauge maximum');
+}
+
+export function test_decibel_spectrum_height_keeps_low_values_visible(): void {
+  // Arrange
+  const db: number = 20;
+
+  // Act
+  const height: number = normalizeDecibelSpectrumHeight(db);
+
+  // Assert
+  assertEqual(height, DECIBEL_SPECTRUM_MIN_HEIGHT, 'spectrum should keep a visible minimum height');
 }
 
 export function test_ruler_calibration_sets_selected_reference_length(): void {

@@ -2,6 +2,7 @@ import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TO
 import { AppIcon } from './AppIcon';
 import { pushPage } from '../model/NavigationHelper';
 import { angleSummary, compassSummary, hasLiveDb, homeDbSummary, homeNoiseTitle } from '../model/HomePreviewState';
+import { decibelFromSpectrumHeight, normalizeDecibelDisplayDb } from '../model/DecibelDisplayRange';
 
 /** 仪表项元数据 */
 class Instrument {
@@ -61,10 +62,9 @@ export struct HomeView {
     return hasLiveDb(this.liveActive, this.homeDb);
   }
 
-  // 等级渐变条上当前值指示点的横向百分比（30~100 dB -> 0~100%）
+  // 等级渐变条上当前值指示点的横向百分比（与详情页表盘值域一致）
   dbPositionPct(): string {
-    const c: number = Math.max(30, Math.min(100, this.homeDb));
-    return ((c - 30) / 70 * 100).toFixed(1) + '%';
+    return (normalizeDecibelDisplayDb(this.homeDb) * 100).toFixed(1) + '%';
   }
 
   build() {
@@ -183,7 +183,7 @@ export struct HomeView {
               .width(3.5)
               .height(Math.max(3, 36 * h))
               .borderRadius(2)
-              .backgroundColor(this.hasDb() ? levelColor(30 + h * 80)
+              .backgroundColor(this.hasDb() ? levelColor(decibelFromSpectrumHeight(h))
                 : (i % 3 === 0 ? levelColor(50) : this.th().accent))
           }, (h: number, i: number) => `${i}_${Math.round(h * 100)}`)
         }
