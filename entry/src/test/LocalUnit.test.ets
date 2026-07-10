@@ -4,9 +4,8 @@ import { averageDb, dayBuckets, filterRecordsByRange, peakDb, peakRecord, peakTi
 import { MeasurementSession } from '../main/ets/model/MeasurementSession';
 import { DecibelLevelProcessor } from '../main/ets/model/DecibelLevelProcessor';
 import { DECIBEL_SPECTRUM_MIN_HEIGHT, decibelFromSpectrumHeight, normalizeDecibelDisplayDb,
-  normalizeDecibelSpectrumHeight } from '../main/ets/model/DecibelDisplayRange';
-import { calibratedPxPerCm, resolvedRulerPxPerCm, RULER_CALIBRATION_PRESETS, rulerDistance,
-  shouldAcceptCalibration, systemPxPerCm } from '../main/ets/model/RulerCalibration';
+  formatDecibelStatValue, normalizeDecibelSpectrumHeight } from '../main/ets/model/DecibelDisplayRange';
+import { resolvedRulerPxPerCm, rulerSelectionBounds, systemPxPerCm } from '../main/ets/model/RulerCalibration';
 import { TimerState } from '../main/ets/model/TimerState';
 import { FlashlightState, FLASH_MODE_SOS, FLASH_MODE_STROBE } from '../main/ets/model/FlashlightState';
 import { angleSummary, compassSummary, homeDbSummary, homeNoiseTitle, shouldRunHomeLive } from '../main/ets/model/HomePreviewState';
@@ -190,28 +189,15 @@ export function test_decibel_spectrum_height_keeps_low_values_visible(): void {
   assertEqual(height, DECIBEL_SPECTRUM_MIN_HEIGHT, 'spectrum should keep a visible minimum height');
 }
 
-export function test_ruler_calibration_sets_selected_reference_length(): void {
+export function test_decibel_stat_value_rounds_live_sample(): void {
   // Arrange
-  const markerGapVp: number = 200;
+  const liveSample: number = 58.6;
 
   // Act
-  const pxPerCm: number = calibratedPxPerCm(markerGapVp, 10, 38);
-  const distance: number = rulerDistance(markerGapVp, pxPerCm, 'cm');
+  const value: string = formatDecibelStatValue(liveSample);
 
   // Assert
-  assertEqual(distance, 10, 'calibration should map marker gap to selected reference length');
-}
-
-export function test_ruler_calibration_presets_avoid_oversized_references(): void {
-  // Arrange
-  const oversized: number = RULER_CALIBRATION_PRESETS.filter((preset) => preset.cm > 5.4).length;
-
-  // Act
-  const labels: string = RULER_CALIBRATION_PRESETS.map((preset) => preset.label).join('|');
-
-  // Assert
-  assertEqual(`${labels.includes('A4')}|${oversized}`, 'false|0',
-    'ruler presets should avoid oversized references');
+  assertEqual(value, '59', 'stat value should round live sample');
 }
 
 export function test_ruler_default_scale_uses_system_density(): void {
@@ -219,21 +205,34 @@ export function test_ruler_default_scale_uses_system_density(): void {
   const systemScale: number = systemPxPerCm(480, 3);
 
   // Act
-  const scale: number = resolvedRulerPxPerCm(38, systemScale);
+  const scale: number = resolvedRulerPxPerCm(systemScale);
 
   // Assert
   assertEqual(scale, 63, 'default ruler scale should use system density');
 }
 
-export function test_ruler_calibration_rejects_mismatched_marker_gap(): void {
+export function test_ruler_default_scale_uses_fallback_without_system_density(): void {
   // Arrange
-  const systemScale: number = 63;
+  const missingSystemScale: number = 0;
 
   // Act
-  const accepted: boolean = shouldAcceptCalibration(160, 5.4, systemScale);
+  const scale: number = resolvedRulerPxPerCm(missingSystemScale);
 
   // Assert
-  assertEqual(accepted, false, 'calibration should reject mismatched marker gap');
+  assertEqual(scale, 38, 'default ruler scale should use fallback without system density');
+}
+
+export function test_ruler_selection_bounds_follow_marker_positions(): void {
+  // Arrange
+  const topMarkerY: number = 72;
+  const bottomMarkerY: number = 348;
+
+  // Act
+  const bounds = rulerSelectionBounds(topMarkerY, bottomMarkerY);
+
+  // Assert
+  assertEqual(`${bounds.top}|${bounds.bottom}|${bounds.height}|${bounds.center}`, '72|348|276|210',
+    'selection bounds should follow marker positions');
 }
 
 export function test_history_empty_records_returns_zero_metrics(): void {

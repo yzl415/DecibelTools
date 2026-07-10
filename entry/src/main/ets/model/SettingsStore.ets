@@ -1,6 +1,6 @@
 /**
  * 应用设置仓库：主题 / 隐私同意 / 引导 / 分贝校准 / 计权 / 时间计权 /
- * 屏幕标尺校准 / 单位 / 震动 / 超标提醒。preferences 持久化，单例。
+ * 标尺单位 / 震动 / 超标提醒。preferences 持久化，单例。
  */
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
@@ -13,7 +13,6 @@ const KEY_CALIBRATION: string = 'db_calibration';
 const KEY_MAX_DB: string = 'history_max_db';
 const KEY_WEIGHTING: string = 'db_weighting';     // 'A' | 'C'
 const KEY_RESPONSE: string = 'db_response';        // 'FAST' | 'SLOW'
-const KEY_PX_PER_CM: string = 'ruler_px_per_cm';   // 屏幕每厘米像素（vp）
 const KEY_UNIT: string = 'ruler_unit';             // 'cm' | 'in'
 const KEY_VIBRATION: string = 'vibration';
 const KEY_OVER_ALERT: string = 'over_limit_alert';
@@ -28,7 +27,6 @@ export class SettingsStore {
   historyMaxDb: number = 0;      // 历史最高分贝
   weighting: string = 'A';       // 计权 A/C
   response: string = 'FAST';     // 时间计权 FAST/SLOW
-  pxPerCm: number = 38;          // 屏幕标尺：每厘米 vp（默认值，需用户校准）
   unit: string = 'cm';           // 标尺单位
   vibration: boolean = true;     // 震动反馈
   overLimitAlert: boolean = true; // 超标提醒
@@ -53,7 +51,6 @@ export class SettingsStore {
       this.historyMaxDb = await this.store.get(KEY_MAX_DB, 0) as number;
       this.weighting = await this.store.get(KEY_WEIGHTING, 'A') as string;
       this.response = await this.store.get(KEY_RESPONSE, 'FAST') as string;
-      this.pxPerCm = await this.store.get(KEY_PX_PER_CM, 38) as number;
       this.unit = await this.store.get(KEY_UNIT, 'cm') as string;
       this.vibration = await this.store.get(KEY_VIBRATION, true) as boolean;
       this.overLimitAlert = await this.store.get(KEY_OVER_ALERT, true) as boolean;
@@ -95,11 +92,6 @@ export class SettingsStore {
   async setResponse(v: string): Promise<void> {
     this.response = v;
     await this.putFlush(KEY_RESPONSE, v);
-  }
-
-  async setPxPerCm(v: number): Promise<void> {
-    this.pxPerCm = v;
-    await this.putFlush(KEY_PX_PER_CM, v);
   }
 
   async setUnit(v: string): Promise<void> {

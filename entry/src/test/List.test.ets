@@ -5,6 +5,7 @@ import {
   test_compass_accuracy_mapping_reports_high_medium_low_and_unreliable,
   test_decibel_response_fast_tracks_level_jump_more_than_slow,
   test_decibel_display_range_clamps_values_above_gauge_maximum,
+  test_decibel_stat_value_rounds_live_sample,
   test_decibel_spectrum_height_keeps_low_values_visible,
   test_decibel_weighting_change_rebases_current_level,
   test_flashlight_mode_switch_keeps_frequency_state_isolated,
@@ -23,10 +24,9 @@ import {
   test_measurement_preview_does_not_accumulate_statistics,
   test_measurement_records_min_avg_and_peak_after_start,
   test_measurement_stop_persists_only_when_saved_with_duration,
-  test_ruler_calibration_rejects_mismatched_marker_gap,
-  test_ruler_calibration_presets_avoid_oversized_references,
-  test_ruler_calibration_sets_selected_reference_length,
+  test_ruler_default_scale_uses_fallback_without_system_density,
   test_ruler_default_scale_uses_system_density,
+  test_ruler_selection_bounds_follow_marker_positions,
   test_timer_start_stop_lap_and_running_reset_clears_state
 } from './LocalUnit.test';
 
@@ -76,11 +76,11 @@ export default function testsuite(): void {
   test_decibel_weighting_change_rebases_current_level();
   test_decibel_response_fast_tracks_level_jump_more_than_slow();
   test_decibel_display_range_clamps_values_above_gauge_maximum();
+  test_decibel_stat_value_rounds_live_sample();
   test_decibel_spectrum_height_keeps_low_values_visible();
-  test_ruler_calibration_sets_selected_reference_length();
-  test_ruler_calibration_presets_avoid_oversized_references();
   test_ruler_default_scale_uses_system_density();
-  test_ruler_calibration_rejects_mismatched_marker_gap();
+  test_ruler_default_scale_uses_fallback_without_system_density();
+  test_ruler_selection_bounds_follow_marker_positions();
   test_history_empty_records_returns_zero_metrics();
   test_history_seven_day_buckets_keep_oldest_to_today_order();
   test_history_peak_time_uses_record_with_highest_peak();

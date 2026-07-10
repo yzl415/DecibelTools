@@ -9,7 +9,7 @@ import { backPage } from '../model/NavigationHelper';
 import { DecibelMeasurementService, DecibelMeasurementSnapshot } from '../model/DecibelMeasurementService';
 import { MeasurementSummary } from '../model/MeasurementSession';
 import { DECIBEL_DISPLAY_MAX_DB, DECIBEL_DISPLAY_MIN_DB, decibelFromSpectrumHeight,
-  normalizeDecibelDisplayDb } from '../model/DecibelDisplayRange';
+  formatDecibelStatValue, normalizeDecibelDisplayDb } from '../model/DecibelDisplayRange';
 
 @Entry
 @Component
@@ -500,11 +500,50 @@ struct DecibelPage {
   @Builder
   Stats() {
     Row() {
-      this.StatCell('MIN', Math.round(this.minDb).toString(), this.th().success)
+      Column() {
+        Text(formatDecibelStatValue(this.minDb))
+          .fontSize(21)
+          .fontFamily(MONO_B)
+          .fontColor(this.th().success)
+        Text('MIN')
+          .fontSize(9)
+          .fontFamily(MONO)
+          .fontColor(this.th().textTertiary)
+          .letterSpacing(1.2)
+          .margin({ top: 5 })
+      }
+      .layoutWeight(1)
+      .padding({ top: 13, bottom: 13 })
       Column().width(1).height(36).backgroundColor(this.th().divider)
-      this.StatCell('AVG · Leq', this.avg.toString(), this.th().textPrimary)
+      Column() {
+        Text(formatDecibelStatValue(this.avg))
+          .fontSize(21)
+          .fontFamily(MONO_B)
+          .fontColor(this.th().textPrimary)
+        Text('AVG · Leq')
+          .fontSize(9)
+          .fontFamily(MONO)
+          .fontColor(this.th().textTertiary)
+          .letterSpacing(1.2)
+          .margin({ top: 5 })
+      }
+      .layoutWeight(1)
+      .padding({ top: 13, bottom: 13 })
       Column().width(1).height(36).backgroundColor(this.th().divider)
-      this.StatCell('MAX · 峰值', Math.round(this.peak).toString(), this.th().danger)
+      Column() {
+        Text(formatDecibelStatValue(this.peak))
+          .fontSize(21)
+          .fontFamily(MONO_B)
+          .fontColor(this.th().danger)
+        Text('MAX · 峰值')
+          .fontSize(9)
+          .fontFamily(MONO)
+          .fontColor(this.th().textTertiary)
+          .letterSpacing(1.2)
+          .margin({ top: 5 })
+      }
+      .layoutWeight(1)
+      .padding({ top: 13, bottom: 13 })
     }
     .width('100%')
     .padding({ top: 6, bottom: 6 })
@@ -512,24 +551,6 @@ struct DecibelPage {
     .borderRadius(16)
     .border({ width: 1, color: this.th().cardBorder })
     .margin({ bottom: 14 })
-  }
-
-  @Builder
-  StatCell(label: string, value: string, color: string) {
-    Column() {
-      Text(value)
-        .fontSize(21)
-        .fontFamily(MONO_B)
-        .fontColor(color)
-      Text(label)
-        .fontSize(9)
-        .fontFamily(MONO)
-        .fontColor(this.th().textTertiary)
-        .letterSpacing(1.2)
-        .margin({ top: 5 })
-    }
-    .layoutWeight(1)
-    .padding({ top: 13, bottom: 13 })
   }
 
   @Builder

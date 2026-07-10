@@ -116,10 +116,6 @@ export struct SettingsView {
               this.store.setUnit(v);
             })
           this.Divider()
-          this.NavRow(this.th().surfaceAlt, this.th().textSecondary, 'ruler', '屏幕校准',
-            this.store.pxPerCm.toFixed(0) + ' px/cm',
-            () => pushPage(this.getUIContext(), 'pages/RulerPage'))
-          this.Divider()
           this.ToggleRow(this.th().surfaceAlt, this.th().textSecondary, 'timer', '震动反馈',
             this.vibration, (v: boolean) => {
               this.vibration = v;

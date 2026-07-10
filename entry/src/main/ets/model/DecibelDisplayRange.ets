@@ -19,3 +19,7 @@ export function decibelFromSpectrumHeight(height: number): number {
   const clamped: number = Math.max(0, Math.min(1, height));
   return DECIBEL_DISPLAY_MIN_DB + clamped * (DECIBEL_DISPLAY_MAX_DB - DECIBEL_DISPLAY_MIN_DB);
 }
+
+export function formatDecibelStatValue(db: number): string {
+  return Math.round(db).toString();
+}
