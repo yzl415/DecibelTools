@@ -4,6 +4,7 @@ import { RecordStore } from './RecordStore';
 import { SettingsStore } from './SettingsStore';
 import { LEVEL_NOISY_THRESHOLD } from './Theme';
 import { alertFeedback } from './Haptics';
+import { HardwareReadingState } from './HardwareReadingState';
 
 const OVER_ALERT_COOLDOWN_MS: number = 6000;
 
@@ -16,6 +17,9 @@ export class DecibelMeasurementSnapshot {
   elapsedSec: number = 0;
   count: number = 0;
   spectrum: number[] = [];
+  available: boolean = false;
+  waiting: boolean = false;
+  timedOut: boolean = false;
 }
 
 export class DecibelMeasurementService {
@@ -40,6 +44,7 @@ export class DecibelMeasurementService {
   private lastAlertTs: number = 0;
   private latestSeq: number = 0;
   private recordedSeq: number = 0;
+  private readingState: HardwareReadingState = new HardwareReadingState();
 
   private constructor() {
     this.meter.onDb = (db: number) => this.handleDb(db);
@@ -97,6 +102,10 @@ export class DecibelMeasurementService {
     out.elapsedSec = this.elapsedSec;
     out.count = this.count;
     out.spectrum = this.running ? this.meter.getSpectrum() : [];
+    const health = this.readingState.snapshot(nowMs);
+    out.available = this.running && health.available;
+    out.waiting = this.running && health.waiting;
+    out.timedOut = this.running && health.timedOut;
     return out;
   }
 
@@ -122,6 +131,7 @@ export class DecibelMeasurementService {
     }
     await this.meter.stop();
     this.running = false;
+    this.readingState.reset();
     this.latest = 0;
     this.current = 0;
     return summary;
@@ -133,12 +143,17 @@ export class DecibelMeasurementService {
     }
     this.meter.configure(this.calibration, this.weighting, this.response);
     this.meter.onDb = (db: number) => this.handleDb(db);
+    this.readingState.markStarted(Date.now());
     const ok: boolean = await this.meter.start();
     this.running = ok;
+    if (!ok) {
+      this.readingState.reset();
+    }
     return ok;
   }
 
   private handleDb(db: number): void {
+    this.readingState.markReading(Date.now());
     this.latest = db;
     this.latestSeq++;
     this.current = Math.round(db);

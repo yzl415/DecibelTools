@@ -13,6 +13,9 @@ struct CompassPage {
   @State heading: number = 0;
   @State active: boolean = false;
   @State accuracy: number = ACC_MEDIUM;
+  @State dataAvailable: boolean = false;
+  @State waitingForData: boolean = false;
+  @State sensorFailed: boolean = false;
   private measurement: CompassMeasurementService = CompassMeasurementService.getInstance();
   private uiTimer: number = -1;
 
@@ -36,6 +39,7 @@ struct CompassPage {
       return;
     }
     this.active = this.measurement.start();
+    this.sensorFailed = !this.active;
     if (!this.active) {
       return;
     }
@@ -49,6 +53,9 @@ struct CompassPage {
     this.active = false;
     this.heading = 0;
     this.accuracy = ACC_MEDIUM;
+    this.dataAvailable = false;
+    this.waitingForData = false;
+    this.sensorFailed = false;
   }
 
   detachPage(): void {
@@ -70,7 +77,10 @@ struct CompassPage {
   refreshFromMeasurement(): void {
     const snapshot: CompassMeasurementSnapshot = this.measurement.snapshot();
     this.active = snapshot.active;
-    if (snapshot.active) {
+    this.dataAvailable = snapshot.available;
+    this.waitingForData = snapshot.waiting;
+    this.sensorFailed = this.sensorFailed || snapshot.timedOut;
+    if (snapshot.available) {
       this.heading = snapshot.heading;
       this.accuracy = snapshot.accuracy;
       return;
@@ -90,12 +100,15 @@ struct CompassPage {
 
   // 精度等级 -> 左侧校准状态文案
   statusText(): string {
-    return compassStatusText(this.active, this.accuracy);
+    if (this.waitingForData) {
+      return '正在等待方向传感器数据…';
+    }
+    return compassStatusText(this.dataAvailable, this.accuracy);
   }
 
   // 精度等级 -> 右侧精度文案
   accuracyText(): string {
-    return compassAccuracyText(this.active, this.accuracy);
+    return compassAccuracyText(this.dataAvailable, this.accuracy);
   }
 
   showInfo(): void {
@@ -110,11 +123,11 @@ struct CompassPage {
       Column() {
         // 大读数
         Row() {
-          Text(this.heading.toString() + '°')
+          Text(this.dataAvailable ? this.heading.toString() + '°' : '--°')
             .fontSize(46)
             .fontFamily(MONO_B)
             .fontColor(this.th().textPrimary)
-          Text(' ' + CompassSensor.dirAbbr(this.heading))
+          Text(this.dataAvailable ? ' ' + CompassSensor.dirAbbr(this.heading) : '')
             .fontSize(20)
             .fontFamily(MONO_B)
             .fontColor(this.th().accentStrong)
@@ -171,7 +184,7 @@ struct CompassPage {
         Row() {
           Text(this.statusText())
             .fontSize(13)
-            .fontColor(this.active ? this.th().textSecondary : this.th().danger)
+            .fontColor(this.dataAvailable || this.waitingForData ? this.th().textSecondary : this.th().danger)
             .layoutWeight(1)
           Text(this.accuracyText())
             .fontSize(12)
@@ -203,6 +216,14 @@ struct CompassPage {
         .border({ width: 1, color: this.th().cardBorder })
         .margin({ top: 14 })
         .onClick(() => this.toggleMeasure())
+
+        if (this.sensorFailed) {
+          Text('未能读取到方向传感器数据，请停止后重试；当前设备也可能不支持指南针。')
+            .fontSize(13)
+            .fontColor(this.th().danger)
+            .textAlign(TextAlign.Center)
+            .margin({ top: 14 })
+        }
 
         Text('提示：远离磁性物体、做 8 字晃动可提升精度。读数仅供参考。')
           .fontSize(11)

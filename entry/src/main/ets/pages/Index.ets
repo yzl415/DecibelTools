@@ -8,8 +8,10 @@ import { AngleMeasurementService, AngleMeasurementSnapshot } from '../model/Angl
 import { CompassMeasurementService, CompassMeasurementSnapshot } from '../model/CompassMeasurementService';
 import { AppIcon } from '../components/AppIcon';
 import { HomeView } from '../components/HomeView';
-import { HistoryView } from '../components/HistoryView';
 import { SettingsView } from '../components/SettingsView';
+import { CalibrationView } from '../components/CalibrationView';
+import { APP_DISPLAY_NAME } from '../model/AppMetadata';
+import { normalizeCalibration } from '../model/SettingsDisplay';
 import { pushPage } from '../model/NavigationHelper';
 
 @Entry
@@ -20,6 +22,8 @@ struct Index {
   @State showWelcome: boolean = false;
   @State curTab: number = 0;
   @State records: MeasureRecord[] = [];
+  @State calibration: number = 0;
+  @State showCalibration: boolean = false;
   @StorageProp('themeDark') themeDark: boolean = false;
   // 首页实时预览状态（下传给 HomeView）
   @State liveActive: boolean = false;   // 麦克风预览是否在跑
@@ -47,6 +51,7 @@ struct Index {
     await this.store.init(ctx);
     await this.recordStore.init(ctx);
     this.records = this.recordStore.records.slice(0);
+    this.calibration = this.store.calibration;
     AppStorage.setOrCreate('themeDark', this.store.themeDark);
     this.showPrivacy = !this.store.privacyAgreed;
     this.showWelcome = this.store.privacyAgreed && !this.store.onboarded;
@@ -62,12 +67,7 @@ struct Index {
     this.pageShown = true;
     // 从分贝仪返回后刷新历史
     this.records = this.recordStore.records.slice(0);
-    // 分贝仪"查看历史"按钮通过 AppStorage 请求切到历史 Tab
-    const req: number | undefined = AppStorage.get('requestTab');
-    if (req !== undefined) {
-      this.curTab = req;
-      AppStorage.delete('requestTab');
-    }
+    this.calibration = this.store.calibration;
     this.syncHomePreview();
   }
 
@@ -95,6 +95,25 @@ struct Index {
     this.syncHomePreview();
   }
 
+  updateCalibration(value: number): void {
+    this.calibration = normalizeCalibration(value);
+    this.store.setCalibration(this.calibration);
+    this.measurement.configure(this.calibration, this.store.weighting,
+      this.store.response, this.store.overLimitAlert);
+  }
+
+  closeCalibration(): void {
+    this.showCalibration = false;
+  }
+
+  onBackPress(): boolean {
+    if (this.showCalibration) {
+      this.closeCalibration();
+      return true;
+    }
+    return false;
+  }
+
   async finishWelcome(): Promise<void> {
     await this.store.setOnboarded();
     this.showWelcome = false;
@@ -104,8 +123,8 @@ struct Index {
   shouldRunHomePreview(): boolean {
     const anyMeasurementActive: boolean = this.measurement.isMeasuring()
       || this.angleMeasurement.isActive() || this.compassMeasurement.isActive();
-    return shouldRunHomeLive(this.pageShown, this.curTab, this.store.privacyAgreed,
-      this.showWelcome, this.showPrivacy, anyMeasurementActive);
+    return shouldRunHomeLive(this.pageShown, this.curTab,
+      this.showWelcome || this.showPrivacy, anyMeasurementActive);
   }
 
   syncHomePreview(): void {
@@ -170,49 +189,66 @@ struct Index {
 
   build() {
     Stack() {
-      Column() {
-        Tabs({ barPosition: BarPosition.End, index: this.curTab }) {
-          TabContent() {
-            HomeView({
-              liveActive: this.liveActive,
-              homeDb: this.homeDb,
-              homeSpectrum: this.homeSpectrum,
-              homeTilt: this.homeTilt,
-              homeHeading: this.homeHeading
-            })
-          }
-          .tabBar(this.BottomTab('工具', 'grid', 0))
+      if (!this.showCalibration) {
+        Column() {
+          Tabs({ barPosition: BarPosition.End, index: this.curTab }) {
+            TabContent() {
+              HomeView({
+                liveActive: this.liveActive,
+                homeDb: this.homeDb,
+                homeSpectrum: this.homeSpectrum,
+                homeTilt: this.homeTilt,
+                homeHeading: this.homeHeading
+              })
+            }
+            .tabBar(this.BottomTab('工具', 'grid', 0))
 
-          TabContent() {
-            HistoryView({ records: this.records })
+            TabContent() {
+              if (this.curTab === 1) {
+                if (this.records.length === 0) {
+                  SettingsView({
+                    calibration: this.calibration,
+                    recordCount: 0,
+                    onClearHistory: () => this.onHistoryCleared(),
+                    onOpenCalibration: () => this.showCalibration = true
+                  })
+                } else {
+                  SettingsView({
+                    calibration: this.calibration,
+                    recordCount: this.records.length,
+                    onClearHistory: () => this.onHistoryCleared(),
+                    onOpenCalibration: () => this.showCalibration = true
+                  })
+                }
+              }
+            }
+            .tabBar(this.BottomTab('设置', 'gear', 1))
           }
-          .tabBar(this.BottomTab('历史', 'list', 1))
-
-          TabContent() {
-            SettingsView({
-              recordCount: this.records.length,
-              onClearHistory: () => this.onHistoryCleared()
-            })
-          }
-          .tabBar(this.BottomTab('设置', 'gear', 2))
+          .barBackgroundColor(this.th().navBar)
+          .scrollable(false)
+          .onChange((i: number) => {
+            this.curTab = i;
+            this.syncHomePreview();
+          })
+          .layoutWeight(1)
         }
-        .barBackgroundColor(this.th().navBar)
-        .scrollable(false)
-        .onChange((i: number) => {
-          this.curTab = i;
-          this.syncHomePreview();
-        })
-        .layoutWeight(1)
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.th().bg)
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(this.th().bg)
 
       if (this.showPrivacy) {
         this.PrivacyGate()
       }
       if (this.showWelcome && !this.showPrivacy) {
         this.WelcomeScreen()
+      }
+      if (this.showCalibration) {
+        CalibrationView({
+          calibration: this.calibration,
+          onChange: (value: number) => this.updateCalibration(value),
+          onBack: () => this.closeCalibration()
+        })
       }
     }
     .width('100%')
@@ -252,7 +288,7 @@ struct Index {
           .linearGradient({ angle: 135, colors: [['#00D68F', 0], ['#00B377', 1]] })
         AppIcon({ name: 'wave', color: '#FFFFFF', iconSize: 52 })
       }
-      Text('声活 · 分贝工具箱')
+      Text(APP_DISPLAY_NAME)
         .fontSize(26)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.th().textPrimary)
@@ -308,7 +344,7 @@ struct Index {
   PrivacyGate() {
     Column() {
       Column() {
-        Text('欢迎使用声活 · 分贝工具箱')
+        Text('欢迎使用' + APP_DISPLAY_NAME)
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.th().textPrimary)

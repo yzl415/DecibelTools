@@ -30,6 +30,7 @@ export class AngleSensor {
       return true;
     }
     try {
+      sensor.getSingleSensorSync(sensor.SensorId.ACCELEROMETER);
       sensor.on(sensor.SensorId.ACCELEROMETER, (data: sensor.AccelerometerResponse) => {
         const x: number = data.x;
         const y: number = data.y;

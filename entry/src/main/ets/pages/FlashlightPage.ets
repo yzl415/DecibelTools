@@ -4,7 +4,8 @@ import { TorchController } from '../model/TorchController';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
 import { backPage, showInfoDialog } from '../model/NavigationHelper';
-import { FLASH_MODE_SOS, FLASH_MODE_STEADY, FLASH_MODE_STROBE, FlashlightState } from '../model/FlashlightState';
+import { FLASH_MODE_SOS, FLASH_MODE_STEADY, FLASH_MODE_STROBE, FlashlightState,
+  shouldSyncFlashlightHardwareState } from '../model/FlashlightState';
 
 @Entry
 @Component
@@ -22,6 +23,17 @@ struct FlashlightPage {
   }
 
   aboutToAppear(): void {
+    this.torch.onStateChanged = (on: boolean) => {
+      if (!shouldSyncFlashlightHardwareState(this.mode)) {
+        return;
+      }
+      this.on = on;
+      this.state.on = on;
+    };
+    this.torch.onSequenceFailed = () => {
+      this.on = false;
+      this.state.turnOff();
+    };
     const ctx = this.getHostContext();
     if (ctx === null) {
       this.supported = false;
@@ -54,16 +66,17 @@ struct FlashlightPage {
 
   applyMode(m: string): void {
     this.torch.stopStrobe();
+    let applied: boolean = false;
     if (m === FLASH_MODE_STEADY) {
-      this.torch.setOn(true);
+      applied = this.torch.setOn(true);
     } else if (m === FLASH_MODE_STROBE) {
       this.state.setFrequency(this.freqHz);
-      this.torch.startStrobe(this.state.strobeIntervalMs());
+      applied = this.torch.startStrobe(this.state.strobeIntervalMs());
     } else {
-      this.torch.startSos(220);
+      applied = this.torch.startSos(220);
     }
-    this.state.on = true;
-    this.on = true;
+    this.state.on = applied;
+    this.on = applied;
   }
 
   pickMode(m: string): void {
@@ -78,7 +91,8 @@ struct FlashlightPage {
     this.state.setFrequency(hz);
     this.freqHz = this.state.freqHz;
     if (this.on && this.mode === FLASH_MODE_STROBE) {
-      this.torch.startStrobe(this.state.strobeIntervalMs());
+      this.on = this.torch.startStrobe(this.state.strobeIntervalMs());
+      this.state.on = this.on;
     }
   }
 

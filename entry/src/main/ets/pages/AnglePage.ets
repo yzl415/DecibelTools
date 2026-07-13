@@ -11,6 +11,10 @@ struct AnglePage {
   @State pitch: number = 0;
   @State roll: number = 0;
   @State active: boolean = false;
+  @State dataAvailable: boolean = false;
+  @State waitingForData: boolean = false;
+  @State sensorFailed: boolean = false;
+  @State calibrated: boolean = false;
   private measurement: AngleMeasurementService = AngleMeasurementService.getInstance();
   private uiTimer: number = -1;
 
@@ -34,6 +38,7 @@ struct AnglePage {
       return;
     }
     this.active = this.measurement.start();
+    this.sensorFailed = !this.active;
     if (!this.active) {
       return;
     }
@@ -47,6 +52,10 @@ struct AnglePage {
     this.active = false;
     this.pitch = 0;
     this.roll = 0;
+    this.dataAvailable = false;
+    this.waitingForData = false;
+    this.sensorFailed = false;
+    this.calibrated = false;
   }
 
   detachPage(): void {
@@ -68,8 +77,12 @@ struct AnglePage {
   refreshFromMeasurement(): void {
     const snapshot: AngleMeasurementSnapshot = this.measurement.snapshot();
     this.active = snapshot.active;
-    this.pitch = snapshot.pitch;
-    this.roll = snapshot.roll;
+    this.dataAvailable = snapshot.available;
+    this.waitingForData = snapshot.waiting;
+    this.sensorFailed = this.sensorFailed || snapshot.timedOut;
+    this.calibrated = snapshot.calibrated;
+    this.pitch = snapshot.available ? snapshot.pitch : 0;
+    this.roll = snapshot.available ? snapshot.roll : 0;
   }
 
   toggleMeasure(): void {
@@ -81,16 +94,24 @@ struct AnglePage {
     }
   }
 
-  calibrate(): void {
+  toggleCalibration(): void {
     tapFeedback();
-    this.measurement.calibrate();
+    if (!this.active || !this.dataAvailable) {
+      return;
+    }
+    if (this.calibrated) {
+      this.measurement.clearCalibration();
+    } else {
+      this.measurement.calibrate();
+    }
     this.refreshFromMeasurement();
   }
 
   showInfo(): void {
     showInfoDialog(this.getUIContext(), '关于角度仪',
       '用设备重力传感器测量倾角。把手机贴在物体表面读取横向 / 纵向角度；'
-        + '将手机放平后点"校准归零"可把当前姿态设为 0°，用于测量相对角度。读数仅供参考。');
+        + '点击"校准归零"可把当前姿态设为 0°，用于测量相对角度；再次点击可取消归零并恢复原始角度。'
+        + '停止测量后校准会自动清除。读数仅供参考。');
   }
 
   // 合成倾角（两轴矢量和）
@@ -154,8 +175,8 @@ struct AnglePage {
         .margin({ top: 6 })
 
         Row({ space: 9 }) {
-          this.AngleBox('横向 ROLL', this.roll)
-          this.AngleBox('纵向 PITCH', this.pitch)
+          this.AngleBox('横向 ROLL', true)
+          this.AngleBox('纵向 PITCH', false)
         }
         .width('100%')
         .margin({ top: 20 })
@@ -181,7 +202,7 @@ struct AnglePage {
 
         Row() {
           Column().width(13).height(13).borderRadius(3).backgroundColor(TOOL_INDIGO)
-          Text('校准归零')
+          Text(this.calibrated ? '取消归零' : '校准归零')
             .fontSize(15)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.th().textPrimary)
@@ -194,10 +215,16 @@ struct AnglePage {
         .borderRadius(16)
         .border({ width: 1, color: this.th().cardBorder })
         .margin({ top: 14 })
-        .onClick(() => this.calibrate())
+        .opacity(this.active && this.dataAvailable ? 1 : 0.45)
+        .onClick(() => this.toggleCalibration())
 
-        if (!this.active) {
-          Text('未能读取到传感器数据，当前设备可能不支持。')
+        if (this.waitingForData) {
+          Text('正在等待加速度计数据…')
+            .fontSize(13)
+            .fontColor(this.th().textSecondary)
+            .margin({ top: 16 })
+        } else if (this.sensorFailed) {
+          Text('未能读取到加速度计数据，请停止后重试；当前设备也可能不支持。')
             .fontSize(13)
             .fontColor(this.th().danger)
             .margin({ top: 16 })
@@ -214,9 +241,9 @@ struct AnglePage {
   // PH_ANGLE
 
   @Builder
-  AngleBox(label: string, value: number) {
+  AngleBox(label: string, useRoll: boolean) {
     Column() {
-      Text(value.toFixed(1) + '°')
+      Text((useRoll ? this.roll : this.pitch).toFixed(1) + '°')
         .fontSize(24)
         .fontFamily(MONO_B)
         .fontColor(this.th().textPrimary)

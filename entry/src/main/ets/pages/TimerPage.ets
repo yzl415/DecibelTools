@@ -1,4 +1,4 @@
-import { getTheme, AppTheme, TOOL_INDIGO , MONO, MONO_B } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_INDIGO, withAlpha, MONO, MONO_B } from '../model/Theme';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
 import { backPage, showInfoDialog } from '../model/NavigationHelper';
@@ -123,14 +123,9 @@ struct TimerPage {
 
         // 控制按钮：计次 / 开始停止 / 复位（三槽稳定占位）
         Row() {
-          this.RoundBtn('计次', 60,
-            this.running ? this.th().surface : this.th().surfaceAlt,
-            this.running ? this.th().textSecondary : this.th().textTertiary,
-            this.running ? 1 : 0.45,
-            () => this.lap())
+          this.RoundBtn('计次', 60, true, () => this.lap())
           this.MainBtn()
-          this.RoundBtn('复位', 60, this.th().surface, this.th().textSecondary, 1,
-            () => this.reset())
+          this.RoundBtn('复位', 60, false, () => this.reset())
         }
         .justifyContent(FlexAlign.SpaceEvenly)
         .width('100%')
@@ -158,7 +153,7 @@ struct TimerPage {
                   Row().width('100%').height(1).backgroundColor(this.th().divider)
                 }
               }
-            })
+            }, (lap: number, idx: number) => `${idx}_${lap}`)
           }
           .width('100%')
           .backgroundColor(this.th().surface)
@@ -179,17 +174,19 @@ struct TimerPage {
   // PH_TIMER
 
   @Builder
-  RoundBtn(label: string, size: number, bg: string, fg: string, op: number, cb: () => void) {
+  RoundBtn(label: string, size: number, isLap: boolean, cb: () => void) {
     Text(label)
       .fontSize(12)
       .fontWeight(FontWeight.Medium)
-      .fontColor(fg)
+      .fontColor(isLap && this.running ? TOOL_INDIGO : this.th().textSecondary)
       .textAlign(TextAlign.Center)
       .width(size).height(size)
       .borderRadius(size / 2)
-      .backgroundColor(bg)
-      .border({ width: 1, color: this.th().cardBorder })
-      .opacity(op)
+      .backgroundColor(isLap && this.running ? withAlpha(TOOL_INDIGO, '20') : this.th().surface)
+      .border({ width: 1, color: isLap && this.running
+        ? withAlpha(TOOL_INDIGO, '80') : this.th().cardBorder })
+      .opacity(isLap && !this.running ? 0.45 : 1)
+      .id(isLap ? 'timer-lap-button' : 'timer-reset-button')
       .onClick(cb)
   }
 

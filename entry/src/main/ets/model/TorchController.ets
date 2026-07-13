@@ -11,6 +11,8 @@ export class TorchController {
   private mgr: camera.CameraManager | null = null;
   private on: boolean = false;
   private timer: number = -1;
+  onStateChanged: (on: boolean) => void = () => {};
+  onSequenceFailed: () => void = () => {};
 
   /** 初始化 CameraManager。返回设备是否支持手电筒 */
   init(ctx: common.UIAbilityContext): boolean {
@@ -20,7 +22,22 @@ export class TorchController {
     }
     try {
       this.mgr = camera.getCameraManager(ctx);
-      return this.mgr.isTorchSupported();
+      const supported: boolean = this.mgr.isTorchSupported();
+      if (supported) {
+        this.mgr.on('torchStatusChange', (err: BusinessError, info: camera.TorchStatusInfo) => {
+          if (err) {
+            console.error(`torchStatusChange failed: ${err.code} ${err.message}`);
+            return;
+          }
+          this.on = info.isTorchAvailable && info.isTorchActive;
+          this.onStateChanged(this.on);
+          if (!info.isTorchAvailable && this.timer !== -1) {
+            this.stopStrobe();
+            this.onSequenceFailed();
+          }
+        });
+      }
+      return supported;
     } catch (e) {
       const err = e as BusinessError;
       console.error(`Torch init failed: ${err.code} ${err.message}`);
@@ -33,38 +50,50 @@ export class TorchController {
   }
 
   /** 常亮开关 */
-  setOn(on: boolean): void {
+  setOn(on: boolean): boolean {
     if (MOCK_HARDWARE) {
       this.on = on;
-      return;
+      this.onStateChanged(this.on);
+      return true;
     }
     if (this.mgr === null) {
-      return;
+      return false;
     }
     try {
       this.mgr.setTorchMode(on ? camera.TorchMode.ON : camera.TorchMode.OFF);
-      this.on = on;
+      this.on = this.mgr.getTorchMode() === (on ? camera.TorchMode.ON : camera.TorchMode.OFF);
+      this.onStateChanged(this.on);
+      return this.on === on;
     } catch (e) {
       const err = e as BusinessError;
       console.error(`setTorchMode failed: ${err.code} ${err.message}`);
+      this.onStateChanged(this.on);
+      return false;
     }
   }
 
   /** 开始频闪：每 intervalMs 翻转一次 */
-  startStrobe(intervalMs: number): void {
+  startStrobe(intervalMs: number): boolean {
     this.stopStrobe();
-    let lit: boolean = false;
+    let lit: boolean = true;
+    if (!this.setOn(true)) {
+      return false;
+    }
     this.timer = setInterval(() => {
       lit = !lit;
-      this.setOn(lit);
+      if (!this.setOn(lit)) {
+        this.stopStrobe();
+        this.onSequenceFailed();
+      }
     }, intervalMs);
+    return true;
   }
 
   /**
    * 开始 SOS：按摩斯电码 ···———··· 循环。unit 为基本时间单位（ms）。
    * 点=1u 亮、划=3u 亮，元素间隔 1u 灭、字母间隔 3u 灭、循环间隔 7u 灭。
    */
-  startSos(unit: number): void {
+  startSos(unit: number): boolean {
     this.stopStrobe();
     // 构造亮/灭序列（true=亮，持续 n 个 unit）
     const pattern: number[] = [];   // 正数=亮的时长(unit)，负数=灭的时长(unit)
@@ -96,11 +125,16 @@ export class TorchController {
         return;
       }
       const lit: boolean = seg > 0;
-      this.setOn(lit);
+      if (!this.setOn(lit)) {
+        this.stopStrobe();
+        this.onSequenceFailed();
+        return;
+      }
       const dur: number = Math.abs(seg) * unit;
       this.timer = setTimeout(step, dur);
     };
     step();
+    return this.on;
   }
 
   stopStrobe(): void {
@@ -115,5 +149,9 @@ export class TorchController {
   dispose(): void {
     this.stopStrobe();
     this.setOn(false);
+    if (this.mgr !== null && !MOCK_HARDWARE) {
+      this.mgr.off('torchStatusChange');
+    }
+    this.mgr = null;
   }
 }

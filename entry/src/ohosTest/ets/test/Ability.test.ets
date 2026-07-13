@@ -10,11 +10,11 @@ function fail(message: string): boolean {
 
 export function test_home_live_stops_outside_tools_tab(): void {
   // Arrange
-  const historyTab: number = 1;
+  const settingsTab: number = 1;
 
   // Act
-  const active: boolean = shouldRunHomeLive(true, historyTab, true, false, false, true);
+  const active: boolean = shouldRunHomeLive(true, settingsTab, false, true);
 
   // Assert
-  assertEqual(active, false, 'home live should stop outside tools tab');
+  assertEqual(active, false, 'home live should stop on settings tab');
 }

@@ -1,24 +1,33 @@
-import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, TOOL_ORANGE, TOOL_PURPLE , MONO, MONO_B } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_GREEN, TOOL_INDIGO, TOOL_ORANGE, MONO, MONO_B,
+  SCROLL_EDGE_ALWAYS_ENABLED } from '../model/Theme';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from './AppIcon';
-import { pushPage } from '../model/NavigationHelper';
+import { DecibelMeasurementService } from '../model/DecibelMeasurementService';
+import { APP_DISPLAY_NAME, formatVersionLabel, getAppVersionName } from '../model/AppMetadata';
+import { formatCalibrationLabel, formatRecordCountLabel } from '../model/SettingsDisplay';
 
 /** 设置 */
 @Component
+// code-linter-disable-next-line
 export struct SettingsView {
   @StorageProp('themeDark') themeDark: boolean = false;
-  @Prop recordCount: number;
+  @Prop calibration: number;
+  @State recordCount: number = 0;
   onClearHistory: () => void = () => {};
+  onOpenCalibration: () => void = () => {};
   private store: SettingsStore = SettingsStore.getInstance();
   private recordStore: RecordStore = RecordStore.getInstance();
+  private measurement: DecibelMeasurementService = DecibelMeasurementService.getInstance();
+  private versionName: string = getAppVersionName();
   // 本地镜像，用于驱动刷新
   @State weighting: string = 'A';
   @State response: string = 'FAST';
   @State unit: string = 'cm';
   @State vibration: boolean = true;
   @State overAlert: boolean = true;
+  @State showClearConfirm: boolean = false;
 
   th(): AppTheme {
     return getTheme(this.themeDark);
@@ -38,11 +47,18 @@ export struct SettingsView {
     this.store.setThemeDark(dark);
   }
 
-  async clearHistory(): Promise<void> {
+  syncMeasurementSettings(): void {
+    this.measurement.configure(this.store.calibration, this.store.weighting,
+      this.store.response, this.store.overLimitAlert);
+  }
+
+  clearHistory(): void {
     if (this.recordCount === 0) {
       return;
     }
-    await this.recordStore.clear();
+    this.recordStore.clear();
+    this.recordCount = 0;
+    this.showClearConfirm = false;
     this.onClearHistory();
   }
 
@@ -50,24 +66,44 @@ export struct SettingsView {
     if (this.recordCount === 0) {
       return;
     }
-    this.getUIContext().showAlertDialog({
-      title: '清空测量历史',
-      message: `将删除全部 ${this.recordCount} 条本地测量记录，此操作不可撤销。`,
-      primaryButton: {
-        value: '取消',
-        action: () => {}
-      },
-      secondaryButton: {
-        value: '清空',
-        fontColor: this.th().danger,
-        action: () => this.clearHistory()
-      }
-    });
+    this.showClearConfirm = true;
+  }
+
+  selectSegment(key: string, value: string): void {
+    if (key === 'weighting') {
+      this.weighting = value;
+      this.store.setWeighting(value);
+      this.syncMeasurementSettings();
+      return;
+    }
+    if (key === 'response') {
+      this.response = value;
+      this.store.setResponse(value);
+      this.syncMeasurementSettings();
+      return;
+    }
+    this.unit = value;
+    this.store.setUnit(value);
+  }
+
+  toggleSetting(key: string, value: boolean): void {
+    if (key === 'overAlert') {
+      this.overAlert = value;
+      this.store.setOverLimitAlert(value);
+      this.syncMeasurementSettings();
+      return;
+    }
+    this.vibration = value;
+    this.store.setVibration(value);
+    if (value) {
+      tapFeedback();
+    }
   }
 
   build() {
-    Scroll() {
-      Column() {
+    Stack({ alignContent: Alignment.Center }) {
+      Scroll() {
+        Column() {
         Text('设置')
           .fontSize(25)
           .fontWeight(FontWeight.Bold)
@@ -78,26 +114,14 @@ export struct SettingsView {
         this.SectionLabel('分贝仪')
         Column() {
           this.NavRow(this.th().tintGreen, TOOL_GREEN, 'wave', '麦克风校准',
-            (this.store.calibration >= 0 ? '+' : '') + this.store.calibration.toFixed(1) + ' dB',
-            () => pushPage(this.getUIContext(), 'pages/CalibratePage'))
+            formatCalibrationLabel(this.calibration),
+            () => this.onOpenCalibration())
           this.Divider()
-          this.SegRow(this.th().tintIndigo, TOOL_INDIGO, 'A', '默认计权', ['A', 'C'],
-            this.weighting, (v: string) => {
-              this.weighting = v;
-              this.store.setWeighting(v);
-            })
+          this.SegRow(this.th().tintIndigo, TOOL_INDIGO, 'A', '计权修正', ['A', 'C'], 'weighting')
           this.Divider()
-          this.SegRow(this.th().tintIndigo, TOOL_INDIGO, 'T', '时间计权', ['FAST', 'SLOW'],
-            this.response, (v: string) => {
-              this.response = v;
-              this.store.setResponse(v);
-            })
+          this.SegRow(this.th().tintIndigo, TOOL_INDIGO, 'T', '时间计权', ['FAST', 'SLOW'], 'response')
           this.Divider()
-          this.ToggleRow(this.th().tintOrange, TOOL_ORANGE, 'angle', '超标提醒', this.overAlert,
-            (v: boolean) => {
-              this.overAlert = v;
-              this.store.setOverLimitAlert(v);
-            })
+          this.ToggleRow(this.th().tintOrange, TOOL_ORANGE, 'angle', '超标震动', 'overAlert')
         }
         .width('100%')
         .backgroundColor(this.th().surface)
@@ -111,19 +135,9 @@ export struct SettingsView {
           this.ThemeRow()
           this.Divider()
           this.SegRow(this.th().surfaceAlt, this.th().textSecondary, 'ruler', '标尺单位',
-            ['cm', 'in'], this.unit, (v: string) => {
-              this.unit = v;
-              this.store.setUnit(v);
-            })
+            ['cm', 'in'], 'unit')
           this.Divider()
-          this.ToggleRow(this.th().surfaceAlt, this.th().textSecondary, 'timer', '震动反馈',
-            this.vibration, (v: boolean) => {
-              this.vibration = v;
-              this.store.setVibration(v);
-              if (v) {
-                tapFeedback();
-              }
-            })
+          this.ToggleRow(this.th().surfaceAlt, this.th().textSecondary, 'timer', '震动反馈', 'vibration')
         }
         .width('100%')
         .backgroundColor(this.th().surface)
@@ -135,7 +149,7 @@ export struct SettingsView {
         this.SectionLabel('数据')
         Column() {
           this.NavRow(this.th().surfaceAlt, this.th().textSecondary, 'list', '清空测量历史',
-            this.recordCount + ' 条', () => this.confirmClearHistory())
+            formatRecordCountLabel(this.recordCount), () => this.confirmClearHistory())
         }
         .width('100%')
         .backgroundColor(this.th().surface)
@@ -144,38 +158,35 @@ export struct SettingsView {
         .clip(true)
         .margin({ bottom: 18 })
 
-        this.SectionLabel('关于')
-        Column() {
-          this.NavRow(this.th().tintPurple, TOOL_PURPLE, 'shield', '隐私政策', '',
-            () => pushPage(this.getUIContext(), 'pages/Privacy'))
-        }
-        .width('100%')
-        .backgroundColor(this.th().surface)
-        .borderRadius(16)
-        .border({ width: 1, color: this.th().cardBorder })
-        .clip(true)
-        .margin({ bottom: 18 })
-
-        Text('声活 · 分贝实用工具箱')
+        Text(APP_DISPLAY_NAME)
           .fontSize(12)
           .fontColor(this.th().textTertiary)
           .width('100%')
           .textAlign(TextAlign.Center)
-        Text('VERSION 2.0.0')
+        Text(formatVersionLabel(this.versionName))
           .fontSize(11)
           .fontFamily(MONO)
           .fontColor(this.th().textTertiary)
-          .opacity(0.7)
           .width('100%')
           .textAlign(TextAlign.Center)
           .margin({ top: 3 })
+        }
+        .width('100%')
+        .padding({ left: 18, right: 18, top: 12, bottom: 24 })
       }
       .width('100%')
-      .padding({ left: 18, right: 18, top: 12, bottom: 24 })
+      .height('100%')
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: SCROLL_EDGE_ALWAYS_ENABLED })
+      .scrollBar(BarState.Off)
+      .align(Alignment.Top)
+
+      if (this.showClearConfirm) {
+        this.ClearHistoryConfirm()
+      }
     }
     .layoutWeight(1)
-    .scrollBar(BarState.Off)
-    .align(Alignment.Top)
+    .width('100%')
+    .height('100%')
   }
   // PH_SETTINGS
 
@@ -231,7 +242,7 @@ export struct SettingsView {
   }
 
   @Builder
-  ToggleRow(tint: string, accent: string, icon: string, title: string, on: boolean, cb: (v: boolean) => void) {
+  ToggleRow(tint: string, accent: string, icon: string, title: string, key: string) {
     Row() {
       this.IconBox(tint, accent, icon)
       Text(title)
@@ -239,16 +250,17 @@ export struct SettingsView {
         .fontWeight(FontWeight.Medium)
         .fontColor(this.th().textPrimary)
         .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: on })
+      Toggle({ type: ToggleType.Switch,
+        isOn: key === 'overAlert' ? this.overAlert : this.vibration })
         .selectedColor(this.th().accent)
-        .onChange((v: boolean) => cb(v))
+        .onChange((v: boolean) => this.toggleSetting(key, v))
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
   }
 
   @Builder
-  SegRow(tint: string, accent: string, icon: string, title: string, opts: string[], cur: string, cb: (v: string) => void) {
+  SegRow(tint: string, accent: string, icon: string, title: string, opts: string[], key: string) {
     Row() {
       this.IconBox(tint, accent, icon)
       Text(title)
@@ -262,13 +274,17 @@ export struct SettingsView {
             .height(26)
             .fontSize(11)
             .fontFamily(MONO_B)
-            .fontColor(cur === o ? this.th().accentText : this.th().textTertiary)
+            .fontColor((key === 'weighting' ? this.weighting === o
+              : (key === 'response' ? this.response === o : this.unit === o))
+              ? this.th().accentText : this.th().textTertiary)
             .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-            .backgroundColor(cur === o ? this.th().accent : '#00000000')
+            .backgroundColor((key === 'weighting' ? this.weighting === o
+              : (key === 'response' ? this.response === o : this.unit === o))
+              ? this.th().accent : '#00000000')
             .borderRadius(6)
             .stateEffect(true)
-            .onClick(() => cb(o))
-        })
+            .onClick(() => this.selectSegment(key, o))
+        }, (o: string) => o)
       }
       .padding(2)
       .backgroundColor(this.th().surfaceAlt)
@@ -311,5 +327,49 @@ export struct SettingsView {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+  }
+
+  @Builder
+  ClearHistoryConfirm() {
+    Column() {
+      Column() {
+        Text('清空测量历史')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.th().textPrimary)
+          .width('100%')
+        Text(`将删除全部 ${this.recordCount} 条本地测量记录，此操作不可撤销。`)
+          .fontSize(14)
+          .lineHeight(21)
+          .fontColor(this.th().textSecondary)
+          .width('100%')
+          .margin({ top: 10, bottom: 20 })
+        Row({ space: 10 }) {
+          Button('取消')
+            .layoutWeight(1)
+            .height(44)
+            .fontColor(this.th().textPrimary)
+            .backgroundColor(this.th().surfaceAlt)
+            .onClick(() => this.showClearConfirm = false)
+          Button('清空')
+            .layoutWeight(1)
+            .height(44)
+            .fontColor('#FFFFFF')
+            .backgroundColor(this.th().danger)
+            .onClick(() => this.clearHistory())
+        }
+        .width('100%')
+      }
+      .width('84%')
+      .padding(22)
+      .backgroundColor(this.th().surface)
+      .borderRadius(16)
+      .border({ width: 1, color: this.th().cardBorder })
+    }
+    .id('clear-history-confirm')
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor('#99000000')
   }
 }

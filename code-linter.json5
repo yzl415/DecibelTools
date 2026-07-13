@@ -28,5 +28,17 @@
     "@security/no-unsafe-dsa-key": "error",
     "@security/no-unsafe-dh-key": "error",
     "@security/no-unsafe-3des": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "entry/src/main/ets/components/AppIcon.ets",
+        "entry/src/main/ets/components/CalibrationView.ets",
+        "entry/src/main/ets/components/HomeView.ets"
+      ],
+      "rules": {
+        "@performance/avoid-overusing-custom-component-check": "off"
+      }
+    }
+  ]
 }

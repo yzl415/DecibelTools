@@ -1,8 +1,9 @@
-import { getTheme, AppTheme, levelColor, withAlpha , MONO, MONO_B } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, withAlpha, MONO, MONO_B,
+  SCROLL_EDGE_ALWAYS_ENABLED } from '../model/Theme';
 import { RecordStore, MeasureRecord } from '../model/RecordStore';
 import { tapFeedback } from '../model/Haptics';
 import { averageDb, dayBuckets, filterRecordsByRange, peakDb, peakRecord, peakTimeLabel, todayRecords,
-  trendSeries, TrendPoint } from '../model/HistoryAnalysis';
+  trendPointX, trendSeries, TrendPoint } from '../model/HistoryAnalysis';
 
 // 趋势图 dB 值域（纵轴 30~90，与 90/60/30 标记一致）
 const TREND_MIN: number = 30;
@@ -13,6 +14,8 @@ const TREND_MAX: number = 90;
 export struct HistoryView {
   @StorageProp('themeDark') themeDark: boolean = false;
   @Prop records: MeasureRecord[];
+  @Prop showHeading: boolean = true;
+  onRecordsChanged: () => void = () => {};
   @State range: number = 1; // 0=今天 1=7天 2=30天
   private store: RecordStore = RecordStore.getInstance();
   // 趋势折线图 Canvas
@@ -118,7 +121,7 @@ export struct HistoryView {
     const ys: number[] = [];
     for (let i = 0; i < n; i++) {
       if (series[i].has) {
-        const x: number = n <= 1 ? w / 2 : (i / (n - 1)) * w;
+        const x: number = trendPointX(i, n, w);
         xs.push(x);
         ys.push(this.mapY(series[i].value, h));
       }
@@ -205,15 +208,22 @@ export struct HistoryView {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
+  async removeRecord(id: number): Promise<void> {
+    await this.store.remove(id);
+    this.onRecordsChanged();
+  }
+
   build() {
     Scroll() {
       Column() {
-        Text('测量历史')
-          .fontSize(25)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.th().textPrimary)
-          .width('100%')
-          .margin({ bottom: 4 })
+        if (this.showHeading) {
+          Text('测量历史')
+            .fontSize(25)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.th().textPrimary)
+            .width('100%')
+            .margin({ bottom: 4 })
+        }
         Text(this.rangeSubtitle())
           .fontSize(12)
           .fontColor(this.th().textSecondary)
@@ -251,6 +261,7 @@ export struct HistoryView {
       .padding({ left: 18, right: 18, top: 12, bottom: 24 })
     }
     .layoutWeight(1)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: SCROLL_EDGE_ALWAYS_ENABLED })
     .scrollBar(BarState.Off)
     .align(Alignment.Top)
   }
@@ -414,8 +425,7 @@ export struct HistoryView {
     .gesture(
       LongPressGesture().onAction(() => {
         tapFeedback();
-        this.store.remove(r.id);
-        this.records = this.store.records.slice(0);
+        this.removeRecord(r.id);
       })
     )
   }

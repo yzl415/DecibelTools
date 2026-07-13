@@ -1,26 +1,20 @@
-import { getTheme, AppTheme, TOOL_GREEN , MONO, MONO_B } from '../model/Theme';
-import { SettingsStore } from '../model/SettingsStore';
-import { backPage } from '../model/NavigationHelper';
+import { getTheme, AppTheme, TOOL_GREEN, MONO, MONO_B } from '../model/Theme';
+import { normalizeCalibration } from '../model/SettingsDisplay';
 
 /** 麦克风校准：用滑块叠加偏移，使读数对齐已知参考声级计。 */
-@Entry
 @Component
-struct CalibratePage {
+export struct CalibrationView {
   @StorageProp('themeDark') themeDark: boolean = false;
-  @State calibration: number = 0;
-  private store: SettingsStore = SettingsStore.getInstance();
+  @Prop calibration: number;
+  onChange: (value: number) => void = () => {};
+  onBack: () => void = () => {};
 
   th(): AppTheme {
     return getTheme(this.themeDark);
   }
 
-  aboutToAppear(): void {
-    this.calibration = this.store.calibration;
-  }
-
-  save(v: number): void {
-    this.calibration = Math.round(v * 10) / 10;
-    this.store.setCalibration(this.calibration);
+  save(value: number): void {
+    this.onChange(normalizeCalibration(value));
   }
 
   build() {
@@ -58,7 +52,7 @@ struct CalibratePage {
             .blockColor('#FFFFFF')
             .selectedColor(TOOL_GREEN)
             .trackColor(this.th().track)
-            .onChange((v: number) => this.save(v))
+            .onChange((value: number) => this.save(value))
         }
         .width('100%')
         .padding(18)
@@ -68,8 +62,8 @@ struct CalibratePage {
 
         Row({ space: 9 }) {
           this.QuickBtn('归零', () => this.save(0))
-          this.QuickBtn('-1.0', () => this.save(Math.max(-15, this.calibration - 1)))
-          this.QuickBtn('+1.0', () => this.save(Math.min(15, this.calibration + 1)))
+          this.QuickBtn('-1.0', () => this.save(this.calibration - 1))
+          this.QuickBtn('+1.0', () => this.save(this.calibration + 1))
         }
         .width('100%')
         .margin({ top: 12 })
@@ -89,10 +83,9 @@ struct CalibratePage {
     .height('100%')
     .backgroundColor(this.th().bg)
   }
-  // PH_CAL
 
   @Builder
-  QuickBtn(label: string, cb: () => void) {
+  QuickBtn(label: string, callback: () => void) {
     Text(label)
       .fontSize(14)
       .fontWeight(FontWeight.Medium)
@@ -103,7 +96,7 @@ struct CalibratePage {
       .backgroundColor(this.th().surface)
       .borderRadius(14)
       .border({ width: 1, color: this.th().cardBorder })
-      .onClick(cb)
+      .onClick(callback)
   }
 
   @Builder
@@ -114,7 +107,7 @@ struct CalibratePage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         Text('‹').fontSize(22).fontColor(this.th().textSecondary).margin({ bottom: 2 })
       }
-      .onClick(() => backPage(this.getUIContext()))
+      .onClick(() => this.onBack())
       Text('麦克风校准')
         .fontSize(16)
         .fontWeight(FontWeight.Bold)

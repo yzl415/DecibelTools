@@ -1,8 +1,8 @@
 import { CompassSensor } from './CompassSensor';
 
-export function shouldRunHomeLive(pageShown: boolean, tabIndex: number, privacyAgreed: boolean,
-  showWelcome: boolean, showPrivacy: boolean, measurementStarted: boolean): boolean {
-  return pageShown && tabIndex === 0 && privacyAgreed && !showWelcome && !showPrivacy && measurementStarted;
+export function shouldRunHomeLive(pageShown: boolean, tabIndex: number,
+  showWelcome: boolean, measurementStarted: boolean): boolean {
+  return pageShown && tabIndex === 0 && !showWelcome && measurementStarted;
 }
 
 export function hasLiveDb(liveActive: boolean, homeDb: number): boolean {

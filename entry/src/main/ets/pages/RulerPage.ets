@@ -1,17 +1,20 @@
-import { getTheme, AppTheme, TOOL_ORANGE, withAlpha , MONO, MONO_B } from '../model/Theme';
+import { getTheme, AppTheme, TOOL_ORANGE, withAlpha, MONO, MONO_B } from '../model/Theme';
 import display from '@ohos.display';
 import { SettingsStore } from '../model/SettingsStore';
 import { backPage } from '../model/NavigationHelper';
-import { resolvedRulerPxPerCm, rulerDistance, RulerSelectionBounds, rulerSelectionBounds,
+import { resolvedRulerPxPerCm, rulerDistance, RulerSelectionBounds, rulerResetBounds,
   systemPxPerCm } from '../model/RulerCalibration';
+
+const RULER_ORIGIN_Y: number = 10;
+const RESET_DISTANCE_CM: number = 5;
 
 @Entry
 @Component
 struct RulerPage {
   @StorageProp('themeDark') themeDark: boolean = false;
   @State unit: string = 'cm';
-  @State topY: number = 44;       // 上标线位置（vp，相对标尺区顶部）
-  @State botY: number = 204;      // 下标线位置
+  @State topY: number = RULER_ORIGIN_Y;
+  @State botY: number = RULER_ORIGIN_Y + 38 * RESET_DISTANCE_CM;
   @State pxPerCm: number = 38;
   @State systemPpc: number = 0;
   private store: SettingsStore = SettingsStore.getInstance();
@@ -27,6 +30,7 @@ struct RulerPage {
     this.unit = this.store.unit;
     this.systemPpc = this.readSystemPxPerCm();
     this.pxPerCm = resolvedRulerPxPerCm(this.systemPpc);
+    this.zero();
   }
 
   // 当前两线间距离（按单位）
@@ -34,15 +38,11 @@ struct RulerPage {
     return rulerDistance(this.botY - this.topY, this.pxPerCm, this.unit);
   }
 
-  selectionBounds(): RulerSelectionBounds {
-    return rulerSelectionBounds(this.topY, this.botY);
-  }
-
   // 生成刻度（每 0.5cm 一短线，每 1cm 一长线带数字），覆盖 rulerH
   ticks(): number[] {
     const arr: number[] = [];
     const stepVp: number = this.pxPerCm / 2; // 0.5cm
-    let y: number = 10;
+    let y: number = RULER_ORIGIN_Y;
     let i: number = 0;
     while (y < this.rulerH - 6) {
       arr.push(y);
@@ -66,8 +66,9 @@ struct RulerPage {
   }
 
   zero(): void {
-    this.topY = 44;
-    this.botY = 44 + this.pxPerCm * 5;
+    const bounds: RulerSelectionBounds = rulerResetBounds(RULER_ORIGIN_Y, this.pxPerCm, RESET_DISTANCE_CM);
+    this.topY = bounds.top;
+    this.botY = bounds.bottom;
   }
 
   readSystemPxPerCm(): number {
@@ -107,23 +108,24 @@ struct RulerPage {
               }
             }
             .position({ x: 0, y: y })
+            .markAnchor({ x: 0, y: '50%' })
           }, (y: number, idx: number) => idx.toString() + '_' + y.toString())
 
           // 测量区域高亮
           Rect()
             .width('92%')
-            .height(this.selectionBounds().height)
+            .height(Math.abs(this.botY - this.topY))
             .radius(6)
             .fill(withAlpha(TOOL_ORANGE, '12'))
             .stroke(withAlpha(TOOL_ORANGE, '80'))
             .strokeWidth(1.5)
             .strokeDashArray([5, 3])
-            .position({ x: '6%', y: this.selectionBounds().top })
+            .position({ x: '6%', y: Math.min(this.topY, this.botY) })
 
           // 上标线（可拖）
-          this.MarkLine(this.topY, true)
+          this.MarkLine(true)
           // 下标线（可拖）
-          this.MarkLine(this.botY, false)
+          this.MarkLine(false)
 
           // 距离气泡
           Row() {
@@ -135,7 +137,7 @@ struct RulerPage {
           .padding({ left: 11, right: 11, top: 5, bottom: 5 })
           .backgroundColor(TOOL_ORANGE)
           .borderRadius(9)
-          .position({ x: '64%', y: this.selectionBounds().center })
+          .position({ x: '64%', y: (this.topY + this.botY) / 2 })
           .markAnchor({ x: 0, y: '50%' })
         }
         .width('100%')
@@ -164,7 +166,7 @@ struct RulerPage {
   // PH_RULER
 
   @Builder
-  MarkLine(y: number, isTop: boolean) {
+  MarkLine(isTop: boolean) {
     Row() {
       Circle().width(14).height(14).fill(TOOL_ORANGE)
         .shadow({ radius: 8, color: withAlpha(TOOL_ORANGE, '99') })
@@ -174,7 +176,7 @@ struct RulerPage {
     .width('100%')
     .height(14)
     .alignItems(VerticalAlign.Center)
-    .position({ x: 0, y: y })
+    .position({ x: 0, y: isTop ? this.topY : this.botY })
     .markAnchor({ x: 0, y: '50%' })
     .gesture(
       PanGesture()

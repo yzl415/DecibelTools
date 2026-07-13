@@ -6,6 +6,7 @@ export const HISTORY_RANGE_30_DAYS: number = 2;
 
 const DAY_MS: number = 24 * 3600 * 1000;
 const WEEKDAY_CN: string[] = ['日', '一', '二', '三', '四', '五', '六'];
+const TREND_EDGE_PADDING: number = 5;
 
 export class TrendPoint {
   label: string = '';
@@ -17,6 +18,14 @@ export class TrendPoint {
     this.value = value;
     this.has = has;
   }
+}
+
+export function trendPointX(index: number, pointCount: number, width: number): number {
+  if (pointCount <= 1) {
+    return width / 2;
+  }
+  const drawingWidth: number = Math.max(0, width - TREND_EDGE_PADDING * 2);
+  return TREND_EDGE_PADDING + index / (pointCount - 1) * drawingWidth;
 }
 
 export function filterRecordsByRange(records: MeasureRecord[], range: number, nowMs: number): MeasureRecord[] {
@@ -76,17 +85,18 @@ export function dayBuckets(records: MeasureRecord[], days: number, nowMs: number
   const now: Date = new Date(nowMs);
   const todayStart: number = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const out: TrendPoint[] = [];
+  const bucketDate: Date = new Date(todayStart);
   for (let d = days - 1; d >= 0; d--) {
     const start: number = todayStart - d * DAY_MS;
     const end: number = start + DAY_MS;
     const recs: MeasureRecord[] = records.filter((r: MeasureRecord) => r.time >= start && r.time < end);
     const idx: number = days - 1 - d;
+    bucketDate.setTime(start);
     let label: string = '';
     if (days === 7) {
-      label = WEEKDAY_CN[new Date(start).getDay()];
+      label = WEEKDAY_CN[bucketDate.getDay()];
     } else if (days === 30 && (idx % 6 === 0 || idx === days - 1)) {
-      const dt: Date = new Date(start);
-      label = `${dt.getMonth() + 1}/${dt.getDate()}`;
+      label = `${bucketDate.getMonth() + 1}/${bucketDate.getDate()}`;
     }
     out.push(new TrendPoint(label, averageDb(recs), recs.length > 0));
   }
@@ -103,12 +113,14 @@ export function trendSeries(records: MeasureRecord[], range: number, nowMs: numb
   const list: MeasureRecord[] = todayRecords(records, nowMs);
   const out: TrendPoint[] = [];
   const n: number = list.length;
+  const recordDate: Date = new Date(0);
   for (let i = 0; i < n; i++) {
     const r: MeasureRecord = list[i];
-    const d: Date = new Date(r.time);
+    recordDate.setTime(r.time);
     let label: string = '';
     if (i === 0 || i === n - 1 || i === Math.floor(n / 2)) {
-      label = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      label = recordDate.getHours().toString().padStart(2, '0') + ':'
+        + recordDate.getMinutes().toString().padStart(2, '0');
     }
     out.push(new TrendPoint(label, r.avg, true));
   }

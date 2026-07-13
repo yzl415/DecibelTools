@@ -2,6 +2,10 @@ export const FLASH_MODE_STEADY: string = 'steady';
 export const FLASH_MODE_STROBE: string = 'strobe';
 export const FLASH_MODE_SOS: string = 'sos';
 
+export function shouldSyncFlashlightHardwareState(mode: string): boolean {
+  return mode === FLASH_MODE_STEADY;
+}
+
 export class FlashlightState {
   on: boolean = false;
   mode: string = FLASH_MODE_STEADY;

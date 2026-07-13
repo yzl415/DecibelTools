@@ -35,6 +35,7 @@ export class CompassSensor {
       return true;
     }
     try {
+      sensor.getSingleSensorSync(sensor.SensorId.ORIENTATION);
       sensor.on(sensor.SensorId.ORIENTATION, (data: sensor.OrientationResponse) => {
         let h: number = data.alpha;
         // 归一化到 0~360

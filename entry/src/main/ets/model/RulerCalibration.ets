@@ -19,6 +19,10 @@ export function rulerSelectionBounds(firstMarkerY: number, secondMarkerY: number
   return new RulerSelectionBounds(firstMarkerY, secondMarkerY);
 }
 
+export function rulerResetBounds(originY: number, pxPerCm: number, distanceCm: number): RulerSelectionBounds {
+  return new RulerSelectionBounds(originY, originY + pxPerCm * distanceCm);
+}
+
 export function systemPxPerCm(densityDPI: number, densityPixels: number): number {
   if (densityDPI <= 0 || densityPixels <= 0) {
     return 0;

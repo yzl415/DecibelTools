@@ -23,6 +23,9 @@ export const TOOL_INDIGO: string = '#6D78FF';
 export const TOOL_PURPLE: string = '#C084FC';
 export const TOOL_ORANGE: string = '#F59E0B';
 
+/** 边界处也保留回弹反馈，避免短内容页面滑动时毫无响应。 */
+export const SCROLL_EDGE_ALWAYS_ENABLED: boolean = true;
+
 /**
  * 等宽字体族（数字读数）— JetBrains Mono，于 EntryAbility 注册。
  * MONO 常规、MONO_B 加粗（注册为独立 family，避免 faux-bold 失真）。
@@ -38,10 +41,10 @@ export class AppTheme {
   surfaceAlt: string = '#F0F1F4';    // 次级表面（chip / 分段控件 / 图标按钮）
   navBar: string = '#FFFFFFF2';      // 底部 Tab 背景
   textPrimary: string = '#1A1C20';   // 主文字
-  textSecondary: string = '#6B7280'; // 次文字
-  textTertiary: string = '#98A0AD';  // 最弱文字 / 占位 / 标签
+  textSecondary: string = '#59616D'; // 次文字
+  textTertiary: string = '#626A76';  // 最弱文字 / 占位 / 标签
   accent: string = '#00D68F';        // 品牌强调色
-  accentStrong: string = '#00B377';  // 强调色在浅底上的文字色（保证对比度）
+  accentStrong: string = '#007A55';  // 强调色在浅底上的文字色（保证对比度）
   accentText: string = '#0B0C10';    // 强调色填充上的文字色
   divider: string = '#E7E8EC';       // 分隔线 / 卡片描边
   success: string = '#16A34A';
@@ -80,8 +83,8 @@ export const DARK_THEME: AppTheme = (() => {
   t.surfaceAlt = '#15171D';
   t.navBar = '#0B0C10F2';
   t.textPrimary = '#F2F3F5';
-  t.textSecondary = '#9CA3AF';
-  t.textTertiary = '#5B6470';
+  t.textSecondary = '#A4ABB5';
+  t.textTertiary = '#858E9B';
   t.accent = '#00D68F';
   t.accentStrong = '#00D68F';
   t.accentText = '#0B0C10';
@@ -116,6 +119,26 @@ export function getTheme(isDark: boolean): AppTheme {
 /** 在某色上叠加透明度（hex 8 位 #AARRGGBB）。alpha 为两位十六进制 00~FF */
 export function withAlpha(color: string, alphaHex: string): string {
   return '#' + alphaHex + color.substring(1);
+}
+
+function colorChannel(hex: string, offset: number): number {
+  const channel: number = parseInt(hex.substring(offset, offset + 2), 16) / 255;
+  return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance(color: string): number {
+  return 0.2126 * colorChannel(color, 1) +
+    0.7152 * colorChannel(color, 3) +
+    0.0722 * colorChannel(color, 5);
+}
+
+/** WCAG 对比度，用于防止主题令牌回退到审核阈值以下。 */
+export function contrastRatio(foreground: string, background: string): number {
+  const foregroundLuminance: number = relativeLuminance(foreground);
+  const backgroundLuminance: number = relativeLuminance(background);
+  const lighter: number = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker: number = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 /**

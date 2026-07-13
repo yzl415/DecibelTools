@@ -1,8 +1,10 @@
-import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TOOL_PURPLE, TOOL_ORANGE , MONO, MONO_B, withAlpha } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, levelLabel, TOOL_GREEN, TOOL_INDIGO, TOOL_PURPLE, TOOL_ORANGE,
+  MONO, MONO_B, SCROLL_EDGE_ALWAYS_ENABLED, withAlpha } from '../model/Theme';
 import { AppIcon } from './AppIcon';
 import { pushPage } from '../model/NavigationHelper';
 import { angleSummary, compassSummary, hasLiveDb, homeDbSummary, homeNoiseTitle } from '../model/HomePreviewState';
 import { decibelFromSpectrumHeight, normalizeDecibelDisplayDb } from '../model/DecibelDisplayRange';
+import { APP_DISPLAY_NAME, formatToolboxVersionLabel, getAppVersionName } from '../model/AppMetadata';
 
 /** 仪表项元数据 */
 class Instrument {
@@ -31,6 +33,7 @@ class Instrument {
 @Component
 export struct HomeView {
   @StorageProp('themeDark') themeDark: boolean = false;
+  private versionName: string = getAppVersionName();
   // 由 Index 下传的实时预览状态
   @Prop liveActive: boolean;
   @Prop homeDb: number;
@@ -73,11 +76,11 @@ export struct HomeView {
         // 顶部品牌
         Row() {
           Column() {
-            Text('声活')
+            Text(APP_DISPLAY_NAME)
               .fontSize(27)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.th().textPrimary)
-            Text('TOOLBOX · v2.0')
+            Text(formatToolboxVersionLabel(this.versionName))
               .fontSize(11)
               .fontFamily(MONO)
               .fontColor(this.th().textTertiary)
@@ -122,6 +125,7 @@ export struct HomeView {
       .padding({ left: 18, right: 18, top: 12, bottom: 24 })
     }
     .layoutWeight(1)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: SCROLL_EDGE_ALWAYS_ENABLED })
     .scrollBar(BarState.Off)
     .align(Alignment.Top)
   }

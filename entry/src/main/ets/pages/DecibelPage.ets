@@ -1,11 +1,12 @@
 import { common, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
-import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO } from '../model/Theme';
+import { getTheme, AppTheme, levelColor, levelDesc, withAlpha, MONO, MONO_B, TOOL_GREEN, TOOL_INDIGO,
+  SCROLL_EDGE_ALWAYS_ENABLED } from '../model/Theme';
 import { MOCK_HARDWARE } from '../model/MockConfig';
 import { SettingsStore } from '../model/SettingsStore';
 import { RecordStore } from '../model/RecordStore';
 import { tapFeedback } from '../model/Haptics';
 import { AppIcon } from '../components/AppIcon';
-import { backPage } from '../model/NavigationHelper';
+import { backPage, pushPage } from '../model/NavigationHelper';
 import { DecibelMeasurementService, DecibelMeasurementSnapshot } from '../model/DecibelMeasurementService';
 import { MeasurementSummary } from '../model/MeasurementSession';
 import { DECIBEL_DISPLAY_MAX_DB, DECIBEL_DISPLAY_MIN_DB, decibelFromSpectrumHeight,
@@ -24,6 +25,8 @@ struct DecibelPage {
   @State previewing: boolean = false;  // 实时预览中（麦克风已开，仅显示当前值）
   @State starting: boolean = false;
   @State denied: boolean = false;
+  @State dataAvailable: boolean = false;
+  @State hardwareTimedOut: boolean = false;
   @State elapsed: number = 0;          // 秒
   @State spectrum: number[] = [];
   @State weighting: string = 'A';
@@ -77,6 +80,10 @@ struct DecibelPage {
     this.detachPage();
   }
 
+  setStarting(starting: boolean): void {
+    this.starting = starting;
+  }
+
   // 点击开始后才开启采集，避免未开始测量时显示实时读数。
   async startPreview(): Promise<boolean> {
     if (this.measurement.isMeasuring()) {
@@ -87,12 +94,12 @@ struct DecibelPage {
     if (this.starting) {
       return false;
     }
-    this.starting = true;
+    this.setStarting(true);
     if (!MOCK_HARDWARE) {
       const ctx = this.getHostContext();
       if (ctx === null) {
         this.denied = true;
-        this.starting = false;
+        this.setStarting(false);
         return false;
       }
       const atManager = abilityAccessCtrl.createAtManager();
@@ -102,12 +109,12 @@ struct DecibelPage {
         const granted: boolean = res.authResults.length > 0 && res.authResults[0] === 0;
         if (!granted) {
           this.denied = true;
-          this.starting = false;
+          this.setStarting(false);
           return false;
         }
       } catch (e) {
         this.denied = true;
-        this.starting = false;
+        this.setStarting(false);
         return false;
       }
     }
@@ -116,12 +123,12 @@ struct DecibelPage {
     const ok: boolean = await this.measurement.start(Date.now());
     if (!ok) {
       this.denied = true;
-      this.starting = false;
+      this.setStarting(false);
       return false;
     }
     this.previewing = true;
     this.ensureUiTimer();
-    this.starting = false;
+    this.setStarting(false);
     return true;
   }
 
@@ -159,6 +166,8 @@ struct DecibelPage {
     this.current = 0;
     this.needle = -80;
     this.spectrum = [];
+    this.dataAvailable = false;
+    this.hardwareTimedOut = false;
   }
 
   // 页面离开只解绑 UI 刷新；共享测量需用户手动点“停止测量”才结束。
@@ -212,12 +221,14 @@ struct DecibelPage {
     this.minDb = snapshot.min;
     this.elapsed = snapshot.elapsedSec;
     this.spectrum = snapshot.spectrum;
+    this.dataAvailable = snapshot.available;
+    this.hardwareTimedOut = snapshot.timedOut;
     this.needle = this.needleAngle();
   }
 
   // 是否有实时读数（预览或测量中）
   hasReading(): boolean {
-    return this.previewing || this.measuring;
+    return this.dataAvailable;
   }
 
   // dB -> 指针角度（30dB≈-80°，120dB≈+70°）
@@ -292,6 +303,13 @@ struct DecibelPage {
               .textAlign(TextAlign.Center)
               .margin({ top: 16 })
           }
+          if (this.hardwareTimedOut) {
+            Text('麦克风已启动，但没有收到音频数据。请停止测量后重试，并检查麦克风是否被其他应用占用。')
+              .fontSize(13)
+              .fontColor(this.th().danger)
+              .textAlign(TextAlign.Center)
+              .margin({ top: 16 })
+          }
           Text('提示：分贝读数为估算值，受麦克风灵敏度影响，仅供参考。可在设置中校准。')
             .fontSize(11)
             .lineHeight(18)
@@ -304,6 +322,7 @@ struct DecibelPage {
         .padding({ left: 22, right: 22, bottom: 30 })
       }
       .layoutWeight(1)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: SCROLL_EDGE_ALWAYS_ENABLED })
       .scrollBar(BarState.Off)
     }
     .width('100%')
@@ -482,13 +501,13 @@ struct DecibelPage {
   Spectrum() {
     // 细窄定宽柱、居中成簇，贴合设计稿声级计样式（非铺满拉伸）
     Row({ space: 4 }) {
-      ForEach(this.spectrum, (h: number) => {
+      ForEach(this.spectrum, (h: number, index: number) => {
         Column()
           .width(5)
           .height(Math.max(3, 42 * h))
           .borderRadius(2.5)
           .backgroundColor(levelColor(decibelFromSpectrumHeight(h)))
-      })
+      }, (h: number, index: number) => `${index}_${Math.round(h * 100)}`)
     }
     .width('100%')
     .height(42)
@@ -618,10 +637,7 @@ struct DecibelPage {
           .border({ width: this.th().isDark ? 1 : 0, color: this.th().cardBorder })
         AppIcon({ name: 'list', color: this.th().textSecondary, iconSize: 16 })
       }
-      .onClick(() => {
-        AppStorage.setOrCreate('requestTab', 1);
-        this.leavePage();
-      })
+      .onClick(() => pushPage(this.getUIContext(), 'pages/HistoryPage'))
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 12, bottom: 8 })
