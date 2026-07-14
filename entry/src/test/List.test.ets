@@ -14,6 +14,8 @@ import {
   test_decibel_weighting_change_rebases_current_level,
   test_flashlight_mode_switch_keeps_frequency_state_isolated,
   test_flashlight_sequence_ignores_intentional_hardware_off_phase,
+  test_flashlight_sos_continues_without_synchronous_hardware_confirmation,
+  test_flashlight_strobe_continues_without_synchronous_hardware_confirmation,
   test_flashlight_status_reflects_current_mode_without_waiting,
   test_history_empty_records_returns_zero_metrics,
   test_history_peak_time_uses_record_with_highest_peak,
@@ -39,6 +41,7 @@ import {
   test_light_theme_tertiary_text_meets_minimum_contrast,
   test_dark_theme_tertiary_text_meets_minimum_contrast,
   test_light_theme_accent_text_meets_minimum_contrast,
+  test_launch_without_onboarding_shows_welcome_directly,
   test_scroll_edge_feedback_remains_enabled_for_short_content,
   test_settings_labels_reflect_current_shared_state,
   test_ruler_default_scale_uses_fallback_without_system_density,
@@ -84,6 +87,8 @@ export function test_flashlight_frequency_is_clamped_without_real_time_wait(): v
 export default function testsuite(): void {
   describe('DecibelTools public behavior', () => {
     it('test_app_display_name_matches_store_submission', 0, test_app_display_name_matches_store_submission);
+    it('test_launch_without_onboarding_shows_welcome_directly', 0,
+      test_launch_without_onboarding_shows_welcome_directly);
     it('test_version_labels_use_installed_bundle_version', 0, test_version_labels_use_installed_bundle_version);
     it('test_settings_labels_reflect_current_shared_state', 0, test_settings_labels_reflect_current_shared_state);
     it('test_record_store_clear_updates_public_state_immediately', 0,
@@ -157,6 +162,10 @@ export default function testsuite(): void {
       test_flashlight_mode_switch_keeps_frequency_state_isolated);
     it('test_flashlight_sequence_ignores_intentional_hardware_off_phase', 0,
       test_flashlight_sequence_ignores_intentional_hardware_off_phase);
+    it('test_flashlight_strobe_continues_without_synchronous_hardware_confirmation', 0,
+      test_flashlight_strobe_continues_without_synchronous_hardware_confirmation);
+    it('test_flashlight_sos_continues_without_synchronous_hardware_confirmation', 0,
+      test_flashlight_sos_continues_without_synchronous_hardware_confirmation);
     it('test_flashlight_status_reflects_current_mode_without_waiting', 0,
       test_flashlight_status_reflects_current_mode_without_waiting);
     it('test_compass_accuracy_mapping_never_claims_calibrated_when_inactive', 0,

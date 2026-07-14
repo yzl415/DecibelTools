@@ -12,13 +12,12 @@ import { SettingsView } from '../components/SettingsView';
 import { CalibrationView } from '../components/CalibrationView';
 import { APP_DISPLAY_NAME } from '../model/AppMetadata';
 import { normalizeCalibration } from '../model/SettingsDisplay';
-import { pushPage } from '../model/NavigationHelper';
+import { shouldShowWelcome } from '../model/LaunchState';
 
 @Entry
 @Component
 struct Index {
   @State loaded: boolean = false;
-  @State showPrivacy: boolean = false;
   @State showWelcome: boolean = false;
   @State curTab: number = 0;
   @State records: MeasureRecord[] = [];
@@ -53,8 +52,7 @@ struct Index {
     this.records = this.recordStore.records.slice(0);
     this.calibration = this.store.calibration;
     AppStorage.setOrCreate('themeDark', this.store.themeDark);
-    this.showPrivacy = !this.store.privacyAgreed;
-    this.showWelcome = this.store.privacyAgreed && !this.store.onboarded;
+    this.showWelcome = shouldShowWelcome(this.store.onboarded);
     this.loaded = true;
     this.syncHomePreview();
   }
@@ -88,13 +86,6 @@ struct Index {
     this.records = this.recordStore.records.slice(0);
   }
 
-  async agreePrivacy(): Promise<void> {
-    await this.store.setPrivacyAgreed();
-    this.showPrivacy = false;
-    this.showWelcome = !this.store.onboarded;
-    this.syncHomePreview();
-  }
-
   updateCalibration(value: number): void {
     this.calibration = normalizeCalibration(value);
     this.store.setCalibration(this.calibration);
@@ -124,7 +115,7 @@ struct Index {
     const anyMeasurementActive: boolean = this.measurement.isMeasuring()
       || this.angleMeasurement.isActive() || this.compassMeasurement.isActive();
     return shouldRunHomeLive(this.pageShown, this.curTab,
-      this.showWelcome || this.showPrivacy, anyMeasurementActive);
+      this.showWelcome, anyMeasurementActive);
   }
 
   syncHomePreview(): void {
@@ -166,17 +157,6 @@ struct Index {
       }
       this.updateHomePreview();
     }, 150);
-  }
-
-  exitApp(): void {
-    const ctx = this.getHostContext();
-    if (ctx === null) {
-      return;
-    }
-    try {
-      ctx.terminateSelf();
-    } catch (e) {
-    }
   }
 
   getHostContext(): common.UIAbilityContext | null {
@@ -237,10 +217,7 @@ struct Index {
         .backgroundColor(this.th().bg)
       }
 
-      if (this.showPrivacy) {
-        this.PrivacyGate()
-      }
-      if (this.showWelcome && !this.showPrivacy) {
+      if (this.showWelcome) {
         this.WelcomeScreen()
       }
       if (this.showCalibration) {
@@ -340,52 +317,4 @@ struct Index {
     .width('100%')
   }
 
-  @Builder
-  PrivacyGate() {
-    Column() {
-      Column() {
-        Text('欢迎使用' + APP_DISPLAY_NAME)
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.th().textPrimary)
-          .margin({ top: 4, bottom: 14 })
-        Text() {
-          Span('在使用前，请阅读并同意')
-          Span('《隐私政策》')
-            .fontColor(this.th().accentStrong)
-            .onClick(() => pushPage(this.getUIContext(), 'pages/Privacy'))
-          Span('。我们高度重视你的隐私：分贝仪麦克风数据仅在本机实时计算、不录音不上传，全部功能均在本地完成，无广告、无第三方共享。')
-        }
-        .fontSize(14)
-        .lineHeight(23)
-        .textAlign(TextAlign.Start)
-        .width('100%')
-
-        Button('同意并开始使用')
-          .width('100%')
-          .height(48)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.th().accentText)
-          .backgroundColor(this.th().accent)
-          .borderRadius(14)
-          .margin({ top: 22 })
-          .onClick(() => this.agreePrivacy())
-        Text('不同意并退出')
-          .fontSize(14)
-          .fontColor(this.th().textTertiary)
-          .margin({ top: 14, bottom: 4 })
-          .onClick(() => this.exitApp())
-      }
-      .width('86%')
-      .padding(24)
-      .backgroundColor(this.th().surface)
-      .borderRadius(22)
-      .alignItems(HorizontalAlign.Center)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#99000000')
-    .justifyContent(FlexAlign.Center)
-  }
 }

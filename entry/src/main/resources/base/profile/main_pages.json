@@ -7,7 +7,6 @@
     "pages/CompassPage",
     "pages/RulerPage",
     "pages/FlashlightPage",
-    "pages/TimerPage",
-    "pages/Privacy"
+    "pages/TimerPage"
   ]
 }

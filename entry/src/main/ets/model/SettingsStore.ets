@@ -1,5 +1,5 @@
 /**
- * 应用设置仓库：主题 / 隐私同意 / 引导 / 分贝校准 / 计权 / 时间计权 /
+ * 应用设置仓库：主题 / 引导 / 分贝校准 / 计权 / 时间计权 /
  * 标尺单位 / 震动 / 超标提醒。preferences 持久化，单例。
  */
 import { preferences } from '@kit.ArkData';
@@ -7,7 +7,6 @@ import { common } from '@kit.AbilityKit';
 
 const STORE_NAME: string = 'decibel_settings';
 const KEY_THEME_DARK: string = 'theme_dark';
-const KEY_PRIVACY_AGREED: string = 'privacy_agreed';
 const KEY_ONBOARDED: string = 'onboarded';
 const KEY_CALIBRATION: string = 'db_calibration';
 const KEY_MAX_DB: string = 'history_max_db';
@@ -21,7 +20,6 @@ export class SettingsStore {
   private static instance: SettingsStore | null = null;
   private store: preferences.Preferences | null = null;
   themeDark: boolean = false;
-  privacyAgreed: boolean = false;
   onboarded: boolean = false;
   calibration: number = 0;       // 分贝校准偏移（dB）
   historyMaxDb: number = 0;      // 历史最高分贝
@@ -45,7 +43,6 @@ export class SettingsStore {
     try {
       this.store = await preferences.getPreferences(context, STORE_NAME);
       this.themeDark = await this.store.get(KEY_THEME_DARK, false) as boolean;
-      this.privacyAgreed = await this.store.get(KEY_PRIVACY_AGREED, false) as boolean;
       this.onboarded = await this.store.get(KEY_ONBOARDED, false) as boolean;
       this.calibration = await this.store.get(KEY_CALIBRATION, 0) as number;
       this.historyMaxDb = await this.store.get(KEY_MAX_DB, 0) as number;
@@ -62,11 +59,6 @@ export class SettingsStore {
   async setThemeDark(dark: boolean): Promise<void> {
     this.themeDark = dark;
     await this.putFlush(KEY_THEME_DARK, dark);
-  }
-
-  async setPrivacyAgreed(): Promise<void> {
-    this.privacyAgreed = true;
-    await this.putFlush(KEY_PRIVACY_AGREED, true);
   }
 
   async setOnboarded(): Promise<void> {

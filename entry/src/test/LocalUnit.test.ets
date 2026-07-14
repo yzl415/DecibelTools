@@ -19,6 +19,39 @@ import { contrastRatio, DARK_THEME, LIGHT_THEME, SCROLL_EDGE_ALWAYS_ENABLED } fr
 import { APP_DISPLAY_NAME, formatVersionLabel, formatToolboxVersionLabel } from '../main/ets/model/AppMetadata';
 import { formatCalibrationLabel, formatRecordCountLabel,
   normalizeCalibration } from '../main/ets/model/SettingsDisplay';
+import { shouldShowWelcome } from '../main/ets/model/LaunchState';
+import { TorchController, TorchTimerDriver } from '../main/ets/model/TorchController';
+
+class FakeTorchTimerDriver implements TorchTimerDriver {
+  private repeatCallback: () => void = () => {};
+  private delayCallback: () => void = () => {};
+
+  repeat(callback: () => void, intervalMs: number): number {
+    this.repeatCallback = callback;
+    return 1;
+  }
+
+  delay(callback: () => void, delayMs: number): number {
+    this.delayCallback = callback;
+    return 2;
+  }
+
+  clearRepeat(timerId: number): void {
+    this.repeatCallback = () => {};
+  }
+
+  clearDelay(timerId: number): void {
+    this.delayCallback = () => {};
+  }
+
+  fireRepeat(): void {
+    this.repeatCallback();
+  }
+
+  fireDelay(): void {
+    this.delayCallback();
+  }
+}
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {
   (actual === expected) || fail(`${message}: expected ${expected}, got ${actual}`);
@@ -45,6 +78,17 @@ export function test_app_display_name_matches_store_submission(): void {
 
   // Assert
   assertEqual(displayName, submittedName, 'display name should match store submission');
+}
+
+export function test_launch_without_onboarding_shows_welcome_directly(): void {
+  // Arrange
+  const onboarded: boolean = false;
+
+  // Act
+  const showWelcome: boolean = shouldShowWelcome(onboarded);
+
+  // Assert
+  assertEqual(showWelcome, true, 'first launch should show welcome directly');
 }
 
 export function test_version_labels_use_installed_bundle_version(): void {
@@ -569,6 +613,42 @@ export function test_flashlight_sequence_ignores_intentional_hardware_off_phase(
   // Assert
   assertEqual(`${steadyMode}|${sequenceModes}`, 'true|false|false',
     'only steady mode should mirror instantaneous hardware state');
+}
+
+export function test_flashlight_strobe_continues_without_synchronous_hardware_confirmation(): void {
+  // Arrange
+  const commands: boolean[] = [];
+  const timer: FakeTorchTimerDriver = new FakeTorchTimerDriver();
+  const controller: TorchController = new TorchController((on: boolean) => {
+    commands.push(on);
+  }, timer);
+
+  // Act
+  const started: boolean = controller.startStrobe(100);
+  timer.fireRepeat();
+  timer.fireRepeat();
+
+  // Assert
+  assertEqual(`${started}|${commands.join('|')}`, 'true|true|false|true',
+    'strobe should continue after accepted asynchronous torch commands');
+}
+
+export function test_flashlight_sos_continues_without_synchronous_hardware_confirmation(): void {
+  // Arrange
+  const commands: boolean[] = [];
+  const timer: FakeTorchTimerDriver = new FakeTorchTimerDriver();
+  const controller: TorchController = new TorchController((on: boolean) => {
+    commands.push(on);
+  }, timer);
+
+  // Act
+  const started: boolean = controller.startSos(220);
+  timer.fireDelay();
+  timer.fireDelay();
+
+  // Assert
+  assertEqual(`${started}|${commands.join('|')}`, 'true|true|false|true',
+    'SOS should continue after accepted asynchronous torch commands');
 }
 
 export function test_compass_accuracy_mapping_never_claims_calibrated_when_inactive(): void {

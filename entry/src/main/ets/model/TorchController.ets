@@ -7,12 +7,45 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { MOCK_HARDWARE } from './MockConfig';
 
+export interface TorchTimerDriver {
+  repeat(callback: () => void, intervalMs: number): number;
+  delay(callback: () => void, delayMs: number): number;
+  clearRepeat(timerId: number): void;
+  clearDelay(timerId: number): void;
+}
+
+class SystemTorchTimerDriver implements TorchTimerDriver {
+  repeat(callback: () => void, intervalMs: number): number {
+    return setInterval(callback, intervalMs);
+  }
+
+  delay(callback: () => void, delayMs: number): number {
+    return setTimeout(callback, delayMs);
+  }
+
+  clearRepeat(timerId: number): void {
+    clearInterval(timerId);
+  }
+
+  clearDelay(timerId: number): void {
+    clearTimeout(timerId);
+  }
+}
+
 export class TorchController {
   private mgr: camera.CameraManager | null = null;
   private on: boolean = false;
   private timer: number = -1;
+  private modeSetter: ((on: boolean) => void) | null;
+  private timerDriver: TorchTimerDriver;
   onStateChanged: (on: boolean) => void = () => {};
   onSequenceFailed: () => void = () => {};
+
+  constructor(modeSetter: ((on: boolean) => void) | null = null,
+    timerDriver: TorchTimerDriver = new SystemTorchTimerDriver()) {
+    this.modeSetter = modeSetter;
+    this.timerDriver = timerDriver;
+  }
 
   /** 初始化 CameraManager。返回设备是否支持手电筒 */
   init(ctx: common.UIAbilityContext): boolean {
@@ -51,6 +84,17 @@ export class TorchController {
 
   /** 常亮开关 */
   setOn(on: boolean): boolean {
+    if (this.modeSetter !== null) {
+      try {
+        this.modeSetter(on);
+        this.on = on;
+        this.onStateChanged(this.on);
+        return true;
+      } catch (e) {
+        this.onStateChanged(this.on);
+        return false;
+      }
+    }
     if (MOCK_HARDWARE) {
       this.on = on;
       this.onStateChanged(this.on);
@@ -61,9 +105,9 @@ export class TorchController {
     }
     try {
       this.mgr.setTorchMode(on ? camera.TorchMode.ON : camera.TorchMode.OFF);
-      this.on = this.mgr.getTorchMode() === (on ? camera.TorchMode.ON : camera.TorchMode.OFF);
+      this.on = on;
       this.onStateChanged(this.on);
-      return this.on === on;
+      return true;
     } catch (e) {
       const err = e as BusinessError;
       console.error(`setTorchMode failed: ${err.code} ${err.message}`);
@@ -79,7 +123,7 @@ export class TorchController {
     if (!this.setOn(true)) {
       return false;
     }
-    this.timer = setInterval(() => {
+    this.timer = this.timerDriver.repeat(() => {
       lit = !lit;
       if (!this.setOn(lit)) {
         this.stopStrobe();
@@ -131,7 +175,7 @@ export class TorchController {
         return;
       }
       const dur: number = Math.abs(seg) * unit;
-      this.timer = setTimeout(step, dur);
+      this.timer = this.timerDriver.delay(step, dur);
     };
     step();
     return this.on;
@@ -139,8 +183,8 @@ export class TorchController {
 
   stopStrobe(): void {
     if (this.timer !== -1) {
-      clearInterval(this.timer);
-      clearTimeout(this.timer);
+      this.timerDriver.clearRepeat(this.timer);
+      this.timerDriver.clearDelay(this.timer);
       this.timer = -1;
     }
   }
